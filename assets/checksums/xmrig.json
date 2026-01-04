@@ -1,0 +1,18 @@
+{
+  "versions": {
+    "6.21.0": {
+      "macos-arm64": {
+        "url": "https://github.com/xmrig/xmrig/releases/download/v6.21.0/xmrig-6.21.0-macos-arm64.tar.gz",
+        "sha256": "REPLACE_WITH_ACTUAL_CHECKSUM_FROM_RELEASE",
+        "filename": "xmrig-6.21.0/xmrig"
+      },
+      "macos-x64": {
+        "url": "https://github.com/xmrig/xmrig/releases/download/v6.21.0/xmrig-6.21.0-macos-x64.tar.gz",
+        "sha256": "REPLACE_WITH_ACTUAL_CHECKSUM_FROM_RELEASE",
+        "filename": "xmrig-6.21.0/xmrig"
+      }
+    }
+  },
+  "recommended": "6.21.0",
+  "minimum": "6.20.0"
+}

@@ -1,0 +1,445 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { clsx } from 'clsx'
+import { useAppStore, type PerformancePreset, type MinerState } from '@/stores/app'
+
+const stateLabels: Record<MinerState, string> = {
+  stopped: 'STOPPED',
+  starting: 'STARTING...',
+  running: 'RUNNING',
+  stopping: 'STOPPING...',
+  error: 'ERROR',
+}
+
+export function Dashboard() {
+  const { status, coins, hasConsent, startMining, stopMining, refreshStatus, logs } = useAppStore()
+  
+  const [selectedCoin, setSelectedCoin] = useState('')
+  const [selectedPool, setSelectedPool] = useState('')
+  const [wallet, setWallet] = useState('')
+  const [worker, setWorker] = useState('')
+  const [threads] = useState(0)
+  const [preset, setPreset] = useState<PerformancePreset>('balanced')
+  const [reconnectCountdown] = useState<number | null>(null)
+
+  const selectedCoinData = coins.find((c) => c.id === selectedCoin)
+  const isExternalMiner = selectedCoinData?.recommended_miner === 'external-asic' || selectedCoinData?.recommended_miner === 'external-gpu'
+  const isCpuMineable = selectedCoinData?.cpu_mineable === true
+  const isTransitioning = status.state === 'starting' || status.state === 'stopping'
+  // Allow starting for all coins, but show warning for non-CPU coins
+  const canStart = Boolean(selectedCoin && selectedPool && wallet && !isTransitioning && status.state === 'stopped')
+
+  // Auto-refresh stats when running
+  useEffect(() => {
+    if (status.isRunning) {
+      const interval = setInterval(refreshStatus, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [status.isRunning, refreshStatus])
+
+  // Last 10 logs for quick view
+  const recentLogs = useMemo(() => logs.slice(-10), [logs])
+
+  const handleStart = useCallback(() => {
+    if (!canStart) return
+    const algorithm = selectedCoinData?.algorithm || ''
+    const tryAnyway = isExternalMiner || !isCpuMineable
+    startMining({ 
+      coin: selectedCoin, 
+      pool: selectedPool, 
+      wallet, 
+      worker, 
+      threads, 
+      preset,
+      algorithm,
+      tryAnyway,
+    })
+  }, [canStart, selectedCoin, selectedPool, wallet, worker, threads, preset, startMining, selectedCoinData, isExternalMiner, isCpuMineable])
+
+  const formatUptime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  if (!hasConsent) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-[var(--text-secondary)]">Please accept the consent dialog to continue.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* Global Stop Button - Always visible when running */}
+      {status.isRunning && (
+        <button
+          onClick={stopMining}
+          className="fixed right-6 top-6 z-50 flex items-center gap-2 rounded-lg bg-danger px-6 py-3 font-semibold text-white shadow-lg transition-all hover:bg-danger-hover hover:scale-105"
+          aria-label="Stop mining immediately"
+        >
+          <StopIcon />
+          STOP
+        </button>
+      )}
+
+      {/* Status Banner */}
+      <div className={clsx(
+        'flex items-center justify-between rounded-xl p-4',
+        status.state === 'running' && 'bg-green-500/10 border border-green-500/30',
+        status.state === 'stopped' && 'bg-surface-elevated border border-[var(--border)]',
+        status.state === 'error' && 'bg-red-500/10 border border-red-500/30',
+        isTransitioning && 'bg-yellow-500/10 border border-yellow-500/30'
+      )}>
+        <div className="flex items-center gap-3">
+          <StatusIndicator state={status.state} />
+          <div>
+            <span className="text-lg font-semibold">{stateLabels[status.state]}</span>
+            {status.isRunning && status.activeMiner && (
+              <span className="ml-2 text-xs text-[var(--text-secondary)] bg-surface px-2 py-0.5 rounded">
+                {status.activeMiner}
+              </span>
+            )}
+          </div>
+        </div>
+        {status.isRunning && status.coin && (
+          <span className="text-sm text-[var(--text-secondary)]">
+            {status.coin.toUpperCase()} → {status.pool?.split('/')[2]?.split(':')[0] || 'pool'}
+          </span>
+        )}
+      </div>
+
+      {/* Warning Banner for non-practical mining */}
+      {status.isRunning && status.warning && (
+        <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+          ⚠️ {status.warning}
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {status.state === 'error' && status.warning && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-4 text-sm text-red-600 dark:text-red-400">
+          <div className="font-medium mb-1">Failed to start mining</div>
+          <div className="text-xs opacity-90">{status.warning}</div>
+          {status.warning.includes('cpuminer-opt') && (
+            <div className="mt-2 text-xs opacity-75">
+              See <span className="font-mono">docs/MINERS.md</span> for installation instructions.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KPI Cards - 3 main metrics */}
+      {status.isRunning && (
+        <div className="grid grid-cols-3 gap-4">
+          <KPICard label="Hashrate" value={`${status.hashrate.toFixed(1)} H/s`} />
+          <KPICard label="Accepted" value={status.acceptedShares.toString()} accent="green" />
+          <KPICard label="Uptime" value={formatUptime(status.uptime)} />
+        </div>
+      )}
+
+      {/* Reconnect countdown */}
+      {reconnectCountdown !== null && (
+        <div className="rounded-lg bg-yellow-500/10 p-3 text-center text-sm text-yellow-600 dark:text-yellow-400">
+          Reconnecting in {reconnectCountdown}s...
+        </div>
+      )}
+
+      {/* Configuration */}
+      <ConfigSection
+        coins={coins}
+        selectedCoin={selectedCoin}
+        setSelectedCoin={setSelectedCoin}
+        selectedPool={selectedPool}
+        setSelectedPool={setSelectedPool}
+        wallet={wallet}
+        setWallet={setWallet}
+        worker={worker}
+        setWorker={setWorker}
+        preset={preset}
+        setPreset={setPreset}
+        isRunning={status.isRunning}
+        isTransitioning={isTransitioning}
+        isExternalMiner={isExternalMiner}
+        selectedCoinData={selectedCoinData}
+        canStart={canStart}
+        onStart={handleStart}
+      />
+
+      {/* Recent Logs */}
+      {status.isRunning && recentLogs.length > 0 && (
+        <section className="rounded-xl border border-[var(--border)] bg-surface-elevated p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-[var(--text-secondary)]">Recent Activity</h3>
+            <button 
+              onClick={() => useAppStore.getState().setPage('logs')}
+              className="text-xs text-accent hover:underline"
+            >
+              Open Logs →
+            </button>
+          </div>
+          <div className="space-y-1 font-mono text-xs">
+            {recentLogs.map((log, i) => (
+              <div key={i} className={clsx(
+                'truncate',
+                log.toLowerCase().includes('error') && 'text-red-500',
+                log.toLowerCase().includes('warn') && 'text-yellow-500',
+                log.toLowerCase().includes('accepted') && 'text-green-500',
+                !log.toLowerCase().includes('error') && !log.toLowerCase().includes('warn') && !log.toLowerCase().includes('accepted') && 'text-[var(--text-secondary)]'
+              )}>
+                {log}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function StatusIndicator({ state }: { state: MinerState }) {
+  if (state === 'running') {
+    return (
+      <span className="relative flex h-3 w-3">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+        <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+      </span>
+    )
+  }
+  if (state === 'starting' || state === 'stopping') {
+    return <span className="h-3 w-3 rounded-full bg-yellow-500 animate-pulse" />
+  }
+  if (state === 'error') {
+    return <span className="h-3 w-3 rounded-full bg-red-500" />
+  }
+  return <span className="h-3 w-3 rounded-full bg-gray-400" />
+}
+
+function KPICard({ label, value, accent }: { label: string; value: string; accent?: 'green' | 'red' }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-surface-elevated p-4 text-center">
+      <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">{label}</p>
+      <p className={clsx(
+        'mt-1 font-mono text-2xl font-bold',
+        accent === 'green' && 'text-green-500',
+        accent === 'red' && 'text-red-500'
+      )}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function StopIcon() {
+  return (
+    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+      <rect x="6" y="6" width="12" height="12" rx="1" />
+    </svg>
+  )
+}
+
+
+interface ConfigSectionProps {
+  coins: any[]
+  selectedCoin: string
+  setSelectedCoin: (v: string) => void
+  selectedPool: string
+  setSelectedPool: (v: string) => void
+  wallet: string
+  setWallet: (v: string) => void
+  worker: string
+  setWorker: (v: string) => void
+  preset: PerformancePreset
+  setPreset: (v: PerformancePreset) => void
+  isRunning: boolean
+  isTransitioning: boolean
+  isExternalMiner: boolean
+  selectedCoinData: any
+  canStart: boolean
+  onStart: () => void
+}
+
+function ConfigSection(props: ConfigSectionProps) {
+  const {
+    coins, selectedCoin, setSelectedCoin, selectedPool, setSelectedPool,
+    wallet, setWallet, worker, setWorker, preset, setPreset,
+    isRunning, isTransitioning, isExternalMiner, selectedCoinData, canStart, onStart
+  } = props
+
+  const presetDescriptions: Record<PerformancePreset, string> = {
+    eco: 'Low power (~25% CPU)',
+    balanced: 'Moderate (~50% CPU)',
+    max: 'Maximum (~75% CPU)',
+  }
+
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-surface-elevated p-6">
+      <h2 className="mb-4 text-lg font-medium">Configuration</h2>
+      
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="coin" className="mb-1 block text-sm font-medium">Coin</label>
+          <select
+            id="coin"
+            value={selectedCoin}
+            onChange={(e) => { setSelectedCoin(e.target.value); setSelectedPool('') }}
+            disabled={isRunning || isTransitioning}
+            className="w-full rounded-lg border border-[var(--border)] bg-surface px-3 py-2 text-sm disabled:opacity-50"
+          >
+            <option value="">Select...</option>
+            {coins.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.symbol})</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="pool" className="mb-1 block text-sm font-medium">Pool</label>
+          <select
+            id="pool"
+            value={selectedPool}
+            onChange={(e) => setSelectedPool(e.target.value)}
+            disabled={isRunning || isTransitioning || !selectedCoin}
+            className="w-full rounded-lg border border-[var(--border)] bg-surface px-3 py-2 text-sm disabled:opacity-50"
+          >
+            <option value="">Select...</option>
+            {selectedCoinData?.default_pools.map((p: any) => (
+              <option key={p.stratum_url} value={p.stratum_url}>{p.name} ({p.region})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="sm:col-span-2">
+          <label htmlFor="wallet" className="mb-1 block text-sm font-medium">Wallet Address</label>
+          <input
+            id="wallet"
+            type="text"
+            value={wallet}
+            onChange={(e) => setWallet(e.target.value)}
+            disabled={isRunning || isTransitioning}
+            placeholder="Your wallet address"
+            className="w-full rounded-lg border border-[var(--border)] bg-surface px-3 py-2 font-mono text-sm disabled:opacity-50"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="worker" className="mb-1 block text-sm font-medium">Worker Name</label>
+          <input
+            id="worker"
+            type="text"
+            value={worker}
+            onChange={(e) => setWorker(e.target.value)}
+            disabled={isRunning || isTransitioning}
+            placeholder="my-mac"
+            className="w-full rounded-lg border border-[var(--border)] bg-surface px-3 py-2 text-sm disabled:opacity-50"
+          />
+        </div>
+
+        {!isExternalMiner && (
+          <div>
+            <label htmlFor="preset" className="mb-1 block text-sm font-medium">Performance</label>
+            <select
+              id="preset"
+              value={preset}
+              onChange={(e) => setPreset(e.target.value as PerformancePreset)}
+              disabled={isRunning || isTransitioning}
+              className="w-full rounded-lg border border-[var(--border)] bg-surface px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value="eco">Eco</option>
+              <option value="balanced">Balanced</option>
+              <option value="max">Max</option>
+            </select>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">{presetDescriptions[preset]}</p>
+          </div>
+        )}
+      </div>
+
+      {selectedCoinData?.notes && (
+        <div className="mt-4 rounded-lg bg-yellow-500/10 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+          {selectedCoinData.notes}
+        </div>
+      )}
+
+      {isExternalMiner && selectedCoinData && (
+        <ExternalMinerGuide coin={selectedCoinData} pool={selectedPool} worker={worker} wallet={wallet} />
+      )}
+
+      {!isRunning && (
+        <button
+          onClick={onStart}
+          disabled={!canStart}
+          className={clsx(
+            "mt-4 w-full rounded-lg py-3 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50",
+            isExternalMiner 
+              ? "bg-yellow-600 hover:bg-yellow-700" 
+              : "bg-accent hover:bg-accent-hover"
+          )}
+        >
+          {isTransitioning ? 'Please wait...' : isExternalMiner ? '⚠️ Try Mining Anyway' : 'Start Mining'}
+        </button>
+      )}
+
+      {isExternalMiner && !isRunning && (
+        <p className="mt-2 text-center text-xs text-yellow-600 dark:text-yellow-400">
+          Warning: {selectedCoinData?.symbol} is not optimized for CPU mining. Very low hashrate expected.
+        </p>
+      )}
+    </section>
+  )
+}
+
+function ExternalMinerGuide({ coin, pool, worker, wallet }: { coin: any; pool: string; worker: string; wallet: string }) {
+  const copyConfig = () => {
+    const config = `Pool: ${pool || '(select above)'}
+Wallet: ${wallet || '(enter above)'}
+Worker: ${worker || 'worker'}
+Algorithm: ${coin.algorithm}`
+    navigator.clipboard.writeText(config)
+  }
+
+  const isGpu = coin.recommended_miner === 'external-gpu'
+  const hardwareType = isGpu ? 'GPU' : 'ASIC'
+  const minerSuggestions: Record<string, string> = {
+    'kawpow': 'T-Rex, NBMiner, or TeamRedMiner',
+    'etchash': 'T-Rex, lolMiner, or TeamRedMiner',
+    'kheavyhash': 'lolMiner or BzMiner',
+    'autolykos2': 'lolMiner or Nanominer',
+    'equihash': 'EWBF, lolMiner, or miniZ',
+    'zelHash': 'lolMiner or miniZ',
+    'scrypt': 'Antminer L7 or similar ASIC',
+    'sha256': 'Antminer S19 or similar ASIC',
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+      <h3 className="font-medium text-blue-600 dark:text-blue-400">
+        External {hardwareType} Miner Mode ({coin.symbol})
+      </h3>
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+        {coin.symbol} uses <strong>{coin.algorithm}</strong> algorithm and requires {hardwareType} hardware.
+        This app cannot mine {coin.symbol} directly.
+      </p>
+      
+      <div className="mt-3 rounded bg-surface p-3">
+        <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">Configure your external miner with:</p>
+        <div className="font-mono text-xs space-y-1">
+          <p><span className="text-[var(--text-secondary)]">Pool:</span> {pool || '(select above)'}</p>
+          <p><span className="text-[var(--text-secondary)]">Worker:</span> {worker || 'worker'}</p>
+          <p><span className="text-[var(--text-secondary)]">Algorithm:</span> {coin.algorithm}</p>
+        </div>
+      </div>
+
+      {minerSuggestions[coin.algorithm] && (
+        <p className="mt-3 text-xs text-[var(--text-secondary)]">
+          <strong>Suggested miners:</strong> {minerSuggestions[coin.algorithm]}
+        </p>
+      )}
+
+      <button 
+        onClick={copyConfig} 
+        className="mt-3 rounded bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
+      >
+        Copy Pool Config
+      </button>
+    </div>
+  )
+}

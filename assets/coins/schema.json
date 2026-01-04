@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CoinDefinition",
+  "description": "Schema for coin plugin definitions",
+  "type": "object",
+  "required": ["schema_version", "id", "name", "symbol", "algorithm", "recommended_miner", "cpu_mineable", "default_pools"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "Schema version, must be 1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Unique identifier (lowercase, alphanumeric, hyphens)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$",
+      "minLength": 1,
+      "maxLength": 10
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["randomx", "sha256", "scrypt", "ethash", "kawpow", "ghostrider"]
+    },
+    "recommended_miner": {
+      "type": "string",
+      "enum": ["xmrig", "external-asic", "custom"]
+    },
+    "cpu_mineable": {
+      "type": "boolean"
+    },
+    "default_pools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "stratum_url", "tls", "region"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "stratum_url": { 
+            "type": "string", 
+            "pattern": "^stratum\\+(tcp|ssl|tls)://[a-zA-Z0-9.-]+:[0-9]+$"
+          },
+          "tls": { "type": "boolean" },
+          "region": { "type": "string" }
+        }
+      }
+    },
+    "notes": {
+      "type": ["string", "null"]
+    },
+    "trusted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a built-in trusted plugin"
+    }
+  }
+}

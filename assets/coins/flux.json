@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "flux",
+  "name": "Flux",
+  "trusted": true,
+  "symbol": "FLUX",
+  "algorithm": "zelHash",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "MiniPooling",
+      "stratum_url": "stratum+ssl://flux.minipooling.com:2059",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://flux.2miners.com:19090",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "HeroMiners",
+      "stratum_url": "stratum+ssl://flux.herominers.com:1190",
+      "tls": true,
+      "region": "global"
+    }
+  ],
+  "notes": "Flux uses ZelHash (Equihash 125,4) algorithm. GPU mining recommended."
+}

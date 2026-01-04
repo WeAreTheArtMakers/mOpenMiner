@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "btc",
+  "name": "Bitcoin",
+  "trusted": true,
+  "symbol": "BTC",
+  "algorithm": "sha256",
+  "recommended_miner": "external-asic",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "Slush Pool",
+      "stratum_url": "stratum+tcp://stratum.slushpool.com:3333",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://btc.f2pool.com:3333",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "ViaBTC",
+      "stratum_url": "stratum+tcp://btc.viabtc.com:3333",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "CPU mining is not practical for Bitcoin. SHA-256 requires ASIC hardware for profitable mining. This app provides monitoring and management for external ASIC miners only."
+}

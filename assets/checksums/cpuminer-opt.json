@@ -1,0 +1,23 @@
+{
+  "recommended": "3.24.5",
+  "versions": {
+    "3.24.5": {
+      "macos-arm64": {
+        "sha256": "REPLACE_WITH_ACTUAL_HASH_AFTER_BUILD",
+        "url": "https://github.com/JayDDee/cpuminer-opt/releases",
+        "notes": "macOS arm64 build requires manual compilation. See docs/MINERS.md"
+      },
+      "macos-x64": {
+        "sha256": "REPLACE_WITH_ACTUAL_HASH_AFTER_BUILD",
+        "url": "https://github.com/JayDDee/cpuminer-opt/releases",
+        "notes": "macOS x64 build requires manual compilation. See docs/MINERS.md"
+      }
+    }
+  },
+  "source": {
+    "repository": "https://github.com/JayDDee/cpuminer-opt",
+    "license": "GPL-2.0",
+    "license_url": "https://github.com/JayDDee/cpuminer-opt/blob/master/LICENSE"
+  },
+  "notes": "cpuminer-opt is GPL-2.0 licensed. It is run as a separate binary (sidecar) to comply with licensing requirements. Users must obtain the binary separately."
+}

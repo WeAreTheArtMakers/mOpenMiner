@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - run: pnpm install --frozen-lockfile
+      
+      # Generate SBOM
+      - name: Generate SBOM (Rust)
+        run: |
+          cargo install cargo-cyclonedx
+          cargo cyclonedx --all --format json > sbom-rust.json
+          
+      - name: Generate SBOM (Node)
+        run: |
+          npx @cyclonedx/cyclonedx-npm --output-file sbom-node.json
+          
+      # Build signed release
+      - name: Build and sign
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Reproducibility flags
+          SOURCE_DATE_EPOCH: 0
+        run: |
+          # Import certificate
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+            security create-keychain -p "" build.keychain
+            security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security list-keychains -s build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "" build.keychain
+            security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          fi
+          
+          pnpm tauri build
+          
+      - name: Notarize
+        if: env.APPLE_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_PATH=$(find apps/desktop/src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
+          if [ -n "$APPLE_ID" ]; then
+            xcrun notarytool submit "$DMG_PATH" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            xcrun stapler staple "$DMG_PATH"
+          fi
+          
+      # Generate hashes for provenance
+      - name: Generate artifact hashes
+        id: hash
+        run: |
+          DMG_PATH=$(find apps/desktop/src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
+          HASH=$(shasum -a 256 "$DMG_PATH" | base64 -w0)
+          echo "hashes=$HASH" >> $GITHUB_OUTPUT
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openminedash-macos-signed
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            sbom-rust.json
+            sbom-node.json
+
+  # SLSA Provenance
+  provenance:
+    needs: build-macos
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
+    with:
+      base64-subjects: "${{ needs.build-macos.outputs.hashes }}"
+      upload-assets: true
+
+  create-release:
+    needs: [build-macos, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            openminedash-macos-signed/*.dmg
+            openminedash-macos-signed/sbom-*.json
+          generate_release_notes: true
+          body: |
+            ## Security
+            - SBOM files included (CycloneDX format)
+            - SLSA provenance attached
+            - Binary checksums in provenance attestation

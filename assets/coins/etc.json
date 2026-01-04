@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "etc",
+  "name": "Ethereum Classic",
+  "trusted": true,
+  "symbol": "ETC",
+  "algorithm": "etchash",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://etc.2miners.com:11010",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "Ethermine",
+      "stratum_url": "stratum+ssl://etc.ethermine.org:5555",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://etc.f2pool.com:8118",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "Ethereum Classic uses ETCHash algorithm. GPU mining recommended. CPU mining is not profitable."
+}

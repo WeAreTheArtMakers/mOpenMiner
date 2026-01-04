@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "vrsc",
+  "name": "Verus Coin",
+  "trusted": true,
+  "symbol": "VRSC",
+  "algorithm": "verushash",
+  "recommended_miner": "xmrig",
+  "cpu_mineable": true,
+  "default_pools": [
+    {
+      "name": "Luckpool",
+      "stratum_url": "stratum+tcp://na.luckpool.net:3956",
+      "tls": false,
+      "region": "na"
+    },
+    {
+      "name": "Luckpool EU",
+      "stratum_url": "stratum+tcp://eu.luckpool.net:3956",
+      "tls": false,
+      "region": "eu"
+    },
+    {
+      "name": "Zergpool",
+      "stratum_url": "stratum+tcp://verushash.mine.zergpool.com:3300",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "VerusHash 2.1 algorithm - CPU optimized, ASIC resistant. Excellent for Apple Silicon."
+}

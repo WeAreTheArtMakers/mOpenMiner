@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "zec",
+  "name": "Zcash",
+  "trusted": true,
+  "symbol": "ZEC",
+  "algorithm": "equihash",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "Flypool",
+      "stratum_url": "stratum+ssl://zec.flypool.org:3443",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://zec.2miners.com:11080",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://zec.f2pool.com:3357",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "Zcash uses Equihash algorithm. GPU mining recommended."
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "kas",
+  "name": "Kaspa",
+  "trusted": true,
+  "symbol": "KAS",
+  "algorithm": "kheavyhash",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "Woolypooly",
+      "stratum_url": "stratum+tcp://pool.woolypooly.com:3112",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "HeroMiners",
+      "stratum_url": "stratum+ssl://kaspa.herominers.com:1206",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "ACC Pool",
+      "stratum_url": "stratum+tcp://kas.acc-pool.pw:16061",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "Kaspa uses kHeavyHash algorithm. GPU mining with dedicated Kaspa miners recommended."
+}

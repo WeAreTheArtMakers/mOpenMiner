@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "ltc",
+  "name": "Litecoin",
+  "trusted": true,
+  "symbol": "LTC",
+  "algorithm": "scrypt",
+  "recommended_miner": "external-asic",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "LitecoinPool",
+      "stratum_url": "stratum+tcp://us.litecoinpool.org:3333",
+      "tls": false,
+      "region": "us"
+    },
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://ltc.f2pool.com:8888",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "ViaBTC",
+      "stratum_url": "stratum+tcp://ltc.viabtc.com:3333",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "CPU mining is not practical for Litecoin. Scrypt requires ASIC hardware for profitable mining. This app provides monitoring and management for external ASIC miners only."
+}

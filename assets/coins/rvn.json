@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "rvn",
+  "name": "Ravencoin",
+  "trusted": true,
+  "symbol": "RVN",
+  "algorithm": "kawpow",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://rvn.2miners.com:16060",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "Flypool",
+      "stratum_url": "stratum+ssl://stratum-ravencoin.flypool.org:3443",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "Nanopool",
+      "stratum_url": "stratum+ssl://rvn-eu1.nanopool.org:12433",
+      "tls": true,
+      "region": "eu"
+    }
+  ],
+  "notes": "Ravencoin uses KawPoW algorithm. GPU mining recommended. CPU mining is not profitable."
+}

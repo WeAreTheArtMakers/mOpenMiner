@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "rtm",
+  "name": "Raptoreum",
+  "trusted": true,
+  "symbol": "RTM",
+  "algorithm": "ghostrider",
+  "recommended_miner": "xmrig",
+  "cpu_mineable": true,
+  "default_pools": [
+    {
+      "name": "Flockpool",
+      "stratum_url": "stratum+tcp://stratum.flockpool.com:4444",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Suprnova",
+      "stratum_url": "stratum+tcp://rtm.suprnova.cc:6273",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Mining Dutch",
+      "stratum_url": "stratum+tcp://rtm.mining-dutch.nl:9052",
+      "tls": false,
+      "region": "eu"
+    }
+  ],
+  "notes": "GhostRider algorithm - CPU optimized. Good for Apple Silicon."
+}
