@@ -64,7 +64,7 @@ Config location: `~/Library/Application Support/openminedash/config.json`
 
 ```bash
 # Clone repository
-git clone https://github.com/user/openminedash.git
+git clone https://github.com/WeAreTheArtMakers/mOpenMiner.git
 cd openminedash
 
 # Run setup script (checks prereqs, installs deps, runs tests)
