@@ -1,4 +1,5 @@
 mod algo_routing;
+mod alert_store;
 mod benchmark;
 mod config;
 mod crash_recovery;
@@ -6,9 +7,12 @@ mod diagnostics;
 mod plugin;
 mod process;
 mod remote;
+mod session_manager;
 mod telemetry;
+mod thread_budget;
 
 pub use algo_routing::*;
+pub use alert_store::*;
 pub use benchmark::*;
 pub use config::*;
 pub use crash_recovery::*;
@@ -16,7 +20,9 @@ pub use diagnostics::*;
 pub use plugin::*;
 pub use process::*;
 pub use remote::*;
+pub use session_manager::*;
 pub use telemetry::*;
+pub use thread_budget::*;
 
 use openminedash_miner_adapters::{
     CpuminerOptAdapter, MinerState, MiningConfig as AdapterMiningConfig, PerformancePreset,
@@ -50,6 +56,7 @@ pub enum CoreError {
 pub type Result<T> = std::result::Result<T, CoreError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MiningConfig {
     pub coin: String,
     pub pool: String,
@@ -417,6 +424,7 @@ impl AppState {
         match self.active_miner {
             ActiveMiner::XMRig => {
                 if self.xmrig_adapter.state() != MinerState::Running {
+                    tracing::debug!("XMRig not running, skipping stats refresh");
                     return Ok(());
                 }
                 match self.xmrig_adapter.get_stats().await {
@@ -426,6 +434,12 @@ impl AppState {
                         self.status.accepted_shares = stats.accepted_shares();
                         self.status.rejected_shares = stats.rejected_shares();
                         self.status.uptime = stats.connection.uptime;
+                        tracing::debug!(
+                            "XMRig stats: hashrate={}, accepted={}, uptime={}",
+                            self.status.hashrate,
+                            self.status.accepted_shares,
+                            self.status.uptime
+                        );
                     }
                     Err(e) => {
                         tracing::warn!("Failed to get XMRig stats: {}", e);

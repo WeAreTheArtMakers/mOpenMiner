@@ -2,7 +2,9 @@ use crate::notifications::{NotificationManager, NotificationSettings};
 use crate::tray;
 use openminedash_core::{
     AppState, CoinDefinition, CrashRecoveryState, MiningConfig, MiningStatus, Profile,
-    create_diagnostics_export,
+    SessionConfig, SessionDetails, SessionManager, SessionSummary, LogsResponse,
+    create_diagnostics_export, Alert, AlertSeverity, AlertStore, BudgetStatus,
+    ThreadBudgetSettings, calculate_budget, BudgetMode, BudgetPreset,
 };
 use openminedash_pools::PoolHealthResult;
 use std::path::PathBuf;
@@ -12,6 +14,8 @@ use tokio::sync::Mutex;
 
 type AppStateHandle = Arc<Mutex<AppState>>;
 type NotificationHandle = Arc<Mutex<NotificationManager>>;
+type SessionManagerHandle = Arc<Mutex<SessionManager>>;
+type AlertStoreHandle = Arc<Mutex<AlertStore>>;
 
 #[tauri::command]
 pub async fn get_consent(state: State<'_, AppStateHandle>) -> Result<bool, String> {
@@ -207,4 +211,181 @@ pub async fn update_tray_state(
 ) -> Result<(), String> {
     tray::update_tray(&app_handle, is_running, hashrate, accepted, uptime, &preset);
     Ok(())
+}
+
+// ============================================================================
+// Session Management Commands (Multi-session mining)
+// ============================================================================
+
+#[tauri::command]
+pub async fn start_session(
+    sessions: State<'_, SessionManagerHandle>,
+    config: SessionConfig,
+) -> Result<String, String> {
+    let manager = sessions.lock().await;
+    manager.start_session(config).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn stop_session(
+    sessions: State<'_, SessionManagerHandle>,
+    session_id: String,
+) -> Result<(), String> {
+    let manager = sessions.lock().await;
+    manager.stop_session(&session_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn suspend_session(
+    sessions: State<'_, SessionManagerHandle>,
+    session_id: String,
+) -> Result<(), String> {
+    let manager = sessions.lock().await;
+    manager.suspend_session(&session_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn resume_session(
+    sessions: State<'_, SessionManagerHandle>,
+    session_id: String,
+) -> Result<(), String> {
+    let manager = sessions.lock().await;
+    manager.resume_session(&session_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_sessions(
+    sessions: State<'_, SessionManagerHandle>,
+) -> Result<Vec<SessionSummary>, String> {
+    let manager = sessions.lock().await;
+    Ok(manager.list_sessions().await)
+}
+
+#[tauri::command]
+pub async fn get_session(
+    sessions: State<'_, SessionManagerHandle>,
+    session_id: String,
+) -> Result<Option<SessionDetails>, String> {
+    let manager = sessions.lock().await;
+    Ok(manager.get_session(&session_id).await)
+}
+
+#[tauri::command]
+pub async fn get_session_logs(
+    sessions: State<'_, SessionManagerHandle>,
+    session_id: String,
+    cursor: Option<u64>,
+    limit: Option<usize>,
+) -> Result<Option<LogsResponse>, String> {
+    let manager = sessions.lock().await;
+    Ok(manager.get_session_logs(&session_id, cursor, limit).await)
+}
+
+#[tauri::command]
+pub async fn stop_all_sessions(
+    sessions: State<'_, SessionManagerHandle>,
+) -> Result<(), String> {
+    let manager = sessions.lock().await;
+    manager.stop_all().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_active_session_count(
+    sessions: State<'_, SessionManagerHandle>,
+) -> Result<usize, String> {
+    let manager = sessions.lock().await;
+    Ok(manager.active_count().await)
+}
+
+#[tauri::command]
+pub async fn refresh_session_stats(
+    sessions: State<'_, SessionManagerHandle>,
+) -> Result<Vec<SessionSummary>, String> {
+    let manager = sessions.lock().await;
+    manager.refresh_all_stats().await;
+    Ok(manager.list_sessions().await)
+}
+
+// ============================================================================
+// Alert Inbox Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn list_alerts(
+    alerts: State<'_, AlertStoreHandle>,
+    limit: Option<usize>,
+    since_id: Option<u64>,
+) -> Result<Vec<Alert>, String> {
+    let store = alerts.lock().await;
+    Ok(store.list(limit.unwrap_or(50), since_id))
+}
+
+#[tauri::command]
+pub async fn get_unread_alert_count(
+    alerts: State<'_, AlertStoreHandle>,
+) -> Result<usize, String> {
+    let store = alerts.lock().await;
+    Ok(store.unread_count())
+}
+
+#[tauri::command]
+pub async fn mark_alerts_read(
+    alerts: State<'_, AlertStoreHandle>,
+) -> Result<(), String> {
+    let mut store = alerts.lock().await;
+    store.mark_all_read();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_alerts(
+    alerts: State<'_, AlertStoreHandle>,
+) -> Result<(), String> {
+    let mut store = alerts.lock().await;
+    store.clear();
+    Ok(())
+}
+
+// ============================================================================
+// Thread Budget Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn get_thread_budget_settings(
+    state: State<'_, AppStateHandle>,
+) -> Result<ThreadBudgetSettings, String> {
+    let state = state.lock().await;
+    let config = openminedash_core::AppConfig::load().unwrap_or_default();
+    Ok(config.thread_budget)
+}
+
+#[tauri::command]
+pub async fn set_thread_budget_settings(
+    state: State<'_, AppStateHandle>,
+    settings: ThreadBudgetSettings,
+) -> Result<(), String> {
+    let _state = state.lock().await;
+    let mut config = openminedash_core::AppConfig::load().unwrap_or_default();
+    config.thread_budget = settings;
+    config.save().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_budget_status(
+    sessions: State<'_, SessionManagerHandle>,
+) -> Result<BudgetStatus, String> {
+    let manager = sessions.lock().await;
+    let sessions_list = manager.list_sessions().await;
+    
+    let active_count = sessions_list.iter()
+        .filter(|s| s.stats.status == openminedash_core::SessionStatus::Running)
+        .count() as u32;
+    
+    let total_threads: u32 = sessions_list.iter()
+        .filter(|s| s.stats.status == openminedash_core::SessionStatus::Running)
+        .map(|s| s.config.threads_hint)
+        .sum();
+    
+    let config = openminedash_core::AppConfig::load().unwrap_or_default();
+    Ok(calculate_budget(&config.thread_budget, active_count, total_threads))
 }

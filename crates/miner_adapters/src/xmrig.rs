@@ -3,13 +3,19 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU16, Ordering};
 use tauri::Manager;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::time::{timeout, Duration};
 use tracing::{error, info, warn};
 
-const XMRIG_API_PORT: u16 = 45580;
+/// Base port for XMRig HTTP API - will try incrementing if busy
+const XMRIG_API_PORT_BASE: u16 = 45580;
+const XMRIG_API_PORT_RANGE: u16 = 20;
+
+/// Current API port (may change if base port is busy)
+static CURRENT_API_PORT: AtomicU16 = AtomicU16::new(XMRIG_API_PORT_BASE);
 
 /// Pinned checksums - embedded in binary, not fetched remotely
 const PINNED_CHECKSUMS: &str = include_str!("../../../assets/checksums/xmrig.json");
@@ -187,6 +193,21 @@ impl XMRigAdapter {
         }
     }
 
+    /// Find an available port for HTTP API
+    fn find_available_port() -> u16 {
+        use std::net::TcpListener;
+        
+        for offset in 0..XMRIG_API_PORT_RANGE {
+            let port = XMRIG_API_PORT_BASE + offset;
+            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                CURRENT_API_PORT.store(port, Ordering::SeqCst);
+                return port;
+            }
+        }
+        // Fallback to base port
+        XMRIG_API_PORT_BASE
+    }
+
     pub async fn start(&mut self, config: &MiningConfig, app_handle: tauri::AppHandle) -> Result<Child> {
         if self.state == MinerState::Running || self.state == MinerState::Starting {
             return Err(AdapterError::Process("Miner already running or starting".to_string()));
@@ -201,7 +222,9 @@ impl XMRigAdapter {
             }
         };
 
-        info!("Starting XMRig with pool: {}, preset: {:?}", config.pool, config.preset);
+        // Find available port for HTTP API
+        let api_port = Self::find_available_port();
+        info!("Starting XMRig with pool: {}, preset: {:?}, API port: {}", config.pool, config.preset, api_port);
 
         // Calculate threads based on preset
         let available_threads = num_cpus::get() as u32;
@@ -220,7 +243,7 @@ impl XMRigAdapter {
             "--cpu-priority", &config.preset.cpu_priority().to_string(),
             "--http-enabled",
             "--http-host", "127.0.0.1",
-            "--http-port", &XMRIG_API_PORT.to_string(),
+            "--http-port", &api_port.to_string(),
             "--no-color",
         ])
         .stdout(Stdio::piped())
@@ -269,12 +292,13 @@ impl XMRigAdapter {
         }
 
         self.state = MinerState::Stopping;
+        let api_port = CURRENT_API_PORT.load(Ordering::SeqCst);
         info!("Stopping XMRig (graceful → force sequence)");
 
         // Step 1: Try graceful shutdown via API
         let client = reqwest::Client::new();
         let _ = client
-            .post(format!("http://127.0.0.1:{}/json_rpc", XMRIG_API_PORT))
+            .post(format!("http://127.0.0.1:{}/json_rpc", api_port))
             .json(&serde_json::json!({
                 "method": "pause",
                 "id": 1
@@ -320,9 +344,10 @@ impl XMRigAdapter {
             return Ok(XMRigStats::default());
         }
 
+        let api_port = CURRENT_API_PORT.load(Ordering::SeqCst);
         let client = reqwest::Client::new();
         let resp = client
-            .get(format!("http://127.0.0.1:{}/2/summary", XMRIG_API_PORT))
+            .get(format!("http://127.0.0.1:{}/2/summary", api_port))
             .timeout(Duration::from_secs(2))
             .send()
             .await

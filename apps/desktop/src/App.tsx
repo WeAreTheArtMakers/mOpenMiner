@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from '@/stores/app'
 import { useTrayEvents } from '@/hooks/useTrayEvents'
 import { ConsentDialog } from '@/components/ConsentDialog'
@@ -19,7 +20,8 @@ export default function App() {
     crashRecovery, 
     clearCrashRecovery, 
     startMining,
-    currentPreset 
+    currentPreset,
+    appendLog,
   } = useAppStore()
 
   // Handle tray menu events
@@ -28,6 +30,16 @@ export default function App() {
   useEffect(() => {
     initializeApp()
   }, [initializeApp])
+
+  // Listen for miner log events
+  useEffect(() => {
+    const unlisten = listen<string>('miner-log', (event) => {
+      appendLog(event.payload)
+    })
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [appendLog])
 
   const renderPage = () => {
     switch (currentPage) {

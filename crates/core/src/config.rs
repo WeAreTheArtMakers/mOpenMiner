@@ -1,6 +1,24 @@
-use crate::{Profile, Result};
+use crate::{Profile, Result, ThreadBudgetSettings};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+/// Application behavior settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorSettings {
+    /// Stop all mining when app quits [DEFAULT: true]
+    pub quit_stops_mining: bool,
+    /// Close window hides app instead of quitting [DEFAULT: true]
+    pub close_hides_app: bool,
+}
+
+impl Default for BehaviorSettings {
+    fn default() -> Self {
+        Self {
+            quit_stops_mining: true,
+            close_hides_app: true,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -8,6 +26,10 @@ pub struct AppConfig {
     pub theme: String,
     pub profiles: Vec<Profile>,
     pub custom_binary_path: Option<PathBuf>,
+    #[serde(default)]
+    pub thread_budget: ThreadBudgetSettings,
+    #[serde(default)]
+    pub behavior: BehaviorSettings,
 }
 
 impl Default for AppConfig {
@@ -17,6 +39,8 @@ impl Default for AppConfig {
             theme: "dark".to_string(),
             profiles: Vec::new(),
             custom_binary_path: None,
+            thread_budget: ThreadBudgetSettings::default(),
+            behavior: BehaviorSettings::default(),
         }
     }
 }

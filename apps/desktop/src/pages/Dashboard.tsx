@@ -1,6 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { clsx } from 'clsx'
+import { invoke } from '@tauri-apps/api/tauri'
 import { useAppStore, type PerformancePreset, type MinerState } from '@/stores/app'
+import { useSessionsStore, useActiveSessions, useTotalHashrate } from '@/stores/sessions'
+import { SessionCard } from '@/components/SessionCard'
+
+interface BudgetStatus {
+  effective_cores: number
+  budget_threads: number
+  total_requested: number
+  is_overcommitted: boolean
+  overcommit_ratio: number
+  suggested_per_session: number
+}
 
 const stateLabels: Record<MinerState, string> = {
   stopped: 'STOPPED',
@@ -12,6 +24,19 @@ const stateLabels: Record<MinerState, string> = {
 
 export function Dashboard() {
   const { status, coins, hasConsent, startMining, stopMining, refreshStatus, logs } = useAppStore()
+  const { 
+    hydrate: hydrateSessions, 
+    stopSession, 
+    suspendSession, 
+    resumeSession, 
+    stopAll,
+    refreshStats,
+    setupEventListeners,
+  } = useSessionsStore()
+  
+  const activeSessions = useActiveSessions()
+  const totalHashrate = useTotalHashrate()
+  const hasActiveSessions = activeSessions.length > 0
   
   const [selectedCoin, setSelectedCoin] = useState('')
   const [selectedPool, setSelectedPool] = useState('')
@@ -20,6 +45,7 @@ export function Dashboard() {
   const [threads] = useState(0)
   const [preset, setPreset] = useState<PerformancePreset>('balanced')
   const [reconnectCountdown] = useState<number | null>(null)
+  const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null)
 
   const selectedCoinData = coins.find((c) => c.id === selectedCoin)
   const isExternalMiner = selectedCoinData?.recommended_miner === 'external-asic' || selectedCoinData?.recommended_miner === 'external-gpu'
@@ -28,13 +54,33 @@ export function Dashboard() {
   // Allow starting for all coins, but show warning for non-CPU coins
   const canStart = Boolean(selectedCoin && selectedPool && wallet && !isTransitioning && status.state === 'stopped')
 
-  // Auto-refresh stats when running
+  // Hydrate sessions on mount and setup event listeners
   useEffect(() => {
-    if (status.isRunning) {
-      const interval = setInterval(refreshStatus, 2000)
+    hydrateSessions()
+    let unlisteners: (() => void)[] = []
+    setupEventListeners().then((fns) => {
+      unlisteners = fns
+    })
+    return () => {
+      unlisteners.forEach((fn) => fn())
+    }
+  }, [hydrateSessions, setupEventListeners])
+
+  // Refresh budget status when sessions change
+  useEffect(() => {
+    invoke<BudgetStatus>('get_budget_status').then(setBudgetStatus).catch(console.error)
+  }, [activeSessions.length])
+
+  // Auto-refresh stats when running (legacy + sessions)
+  useEffect(() => {
+    if (status.isRunning || hasActiveSessions) {
+      const interval = setInterval(() => {
+        refreshStatus()
+        refreshStats()
+      }, 2000)
       return () => clearInterval(interval)
     }
-  }, [status.isRunning, refreshStatus])
+  }, [status.isRunning, hasActiveSessions, refreshStatus, refreshStats])
 
   // Last 10 logs for quick view
   const recentLogs = useMemo(() => logs.slice(-10), [logs])
@@ -73,42 +119,117 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Global Stop Button - Always visible when running */}
-      {status.isRunning && (
-        <button
-          onClick={stopMining}
-          className="fixed right-6 top-6 z-50 flex items-center gap-2 rounded-lg bg-danger px-6 py-3 font-semibold text-white shadow-lg transition-all hover:bg-danger-hover hover:scale-105"
-          aria-label="Stop mining immediately"
-        >
-          <StopIcon />
-          STOP
-        </button>
-      )}
-
-      {/* Status Banner */}
-      <div className={clsx(
-        'flex items-center justify-between rounded-xl p-4',
-        status.state === 'running' && 'bg-green-500/10 border border-green-500/30',
-        status.state === 'stopped' && 'bg-surface-elevated border border-[var(--border)]',
-        status.state === 'error' && 'bg-red-500/10 border border-red-500/30',
-        isTransitioning && 'bg-yellow-500/10 border border-yellow-500/30'
-      )}>
-        <div className="flex items-center gap-3">
-          <StatusIndicator state={status.state} />
-          <div>
-            <span className="text-lg font-semibold">{stateLabels[status.state]}</span>
-            {status.isRunning && status.activeMiner && (
-              <span className="ml-2 text-xs text-[var(--text-secondary)] bg-surface px-2 py-0.5 rounded">
+      {(status.isRunning || hasActiveSessions) && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated border border-[var(--border)]">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+            </span>
+            <span className="text-sm font-medium">
+              {status.coin?.toUpperCase() || 'Mining'} → {status.pool?.split('/')[2]?.split(':')[0] || 'pool'}
+            </span>
+            {status.activeMiner && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-surface text-[var(--text-secondary)]">
                 {status.activeMiner}
               </span>
             )}
           </div>
+          <button
+            onClick={() => {
+              stopMining()
+              stopAll()
+            }}
+            className="flex items-center gap-1.5 rounded-md bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-500 hover:bg-red-500/20 transition-colors"
+            aria-label="Stop all mining"
+          >
+            <StopIcon className="h-3.5 w-3.5" />
+            Stop
+          </button>
         </div>
-        {status.isRunning && status.coin && (
-          <span className="text-sm text-[var(--text-secondary)]">
-            {status.coin.toUpperCase()} → {status.pool?.split('/')[2]?.split(':')[0] || 'pool'}
-          </span>
-        )}
-      </div>
+      )}
+
+      {/* Active Sessions Summary */}
+      {hasActiveSessions && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+              </span>
+              <span className="font-semibold">
+                {activeSessions.length} Active Session{activeSessions.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <span className="font-mono text-sm text-[var(--text-secondary)]">
+              Total: {totalHashrate > 0 ? `${totalHashrate.toFixed(1)} H/s` : '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* CPU Overcommit Warning */}
+      {budgetStatus?.is_overcommitted && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
+          <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+            <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium">CPU Overcommitted</span>
+          </div>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Using {budgetStatus.total_requested} threads ({Math.round(budgetStatus.overcommit_ratio * 100)}% of budget).
+            Consider reducing threads or stopping a session.
+          </p>
+        </div>
+      )}
+
+      {/* Session Cards */}
+      {activeSessions.length > 0 && (
+        <section aria-label="Active mining sessions">
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Running Sessions</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {activeSessions.map((session) => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                onStop={stopSession}
+                onSuspend={suspendSession}
+                onResume={resumeSession}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Legacy Status Banner (for backward compatibility) */}
+      {!hasActiveSessions && (
+        <div className={clsx(
+          'flex items-center justify-between rounded-xl p-4',
+          status.state === 'running' && 'bg-green-500/10 border border-green-500/30',
+          status.state === 'stopped' && 'bg-surface-elevated border border-[var(--border)]',
+          status.state === 'error' && 'bg-red-500/10 border border-red-500/30',
+          isTransitioning && 'bg-yellow-500/10 border border-yellow-500/30'
+        )}>
+          <div className="flex items-center gap-3">
+            <StatusIndicator state={status.state} />
+            <div>
+              <span className="text-lg font-semibold">{stateLabels[status.state]}</span>
+              {status.isRunning && status.activeMiner && (
+                <span className="ml-2 text-xs text-[var(--text-secondary)] bg-surface px-2 py-0.5 rounded">
+                  {status.activeMiner}
+                </span>
+              )}
+            </div>
+          </div>
+          {status.isRunning && status.coin && (
+            <span className="text-sm text-[var(--text-secondary)]">
+              {status.coin.toUpperCase()} → {status.pool?.split('/')[2]?.split(':')[0] || 'pool'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Warning Banner for non-practical mining */}
       {status.isRunning && status.warning && (
@@ -231,9 +352,9 @@ function KPICard({ label, value, accent }: { label: string; value: string; accen
   )
 }
 
-function StopIcon() {
+function StopIcon({ className }: { className?: string }) {
   return (
-    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+    <svg className={className || "h-5 w-5"} fill="currentColor" viewBox="0 0 24 24">
       <rect x="6" y="6" width="12" height="12" rx="1" />
     </svg>
   )

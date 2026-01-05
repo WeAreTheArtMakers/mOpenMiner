@@ -9,7 +9,7 @@
   "cpu_mineable": true,
   "default_pools": [
     {
-      "name": "Luckpool",
+      "name": "Luckpool NA",
       "stratum_url": "stratum+tcp://na.luckpool.net:3956",
       "tls": false,
       "region": "na"
@@ -21,10 +21,22 @@
       "region": "eu"
     },
     {
+      "name": "Luckpool Asia",
+      "stratum_url": "stratum+tcp://asia.luckpool.net:3956",
+      "tls": false,
+      "region": "asia"
+    },
+    {
       "name": "Zergpool",
       "stratum_url": "stratum+tcp://verushash.mine.zergpool.com:3300",
       "tls": false,
-      "region": "global"
+      "region": "auto"
+    },
+    {
+      "name": "CoinBlockers",
+      "stratum_url": "stratum+tcp://vrsc.coinblockers.com:3032",
+      "tls": false,
+      "region": "eu"
     }
   ],
   "notes": "VerusHash 2.1 algorithm - CPU optimized, ASIC resistant. Excellent for Apple Silicon."

@@ -41,21 +41,34 @@ impl Default for NotificationSettings {
 }
 
 /// Notification types for deduplication
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NotificationType {
-    PoolDown,
-    PoolRecovered,
-    HashrateDrop,
-    MinerCrash,
-    MinerStopped,
-    RemoteOffline,
+    PoolDown(String),      // session_id
+    PoolRecovered(String), // session_id
+    HashrateDrop(String),  // session_id
+    MinerCrash(String),    // session_id
+    MinerStopped(String),  // session_id
+    RemoteOffline(String), // endpoint_id
     UpdateAvailable,
+}
+
+/// Dedup key for rate limiting
+fn dedup_key(notification_type: &NotificationType) -> String {
+    match notification_type {
+        NotificationType::PoolDown(id) => format!("pool_down:{}", id),
+        NotificationType::PoolRecovered(id) => format!("pool_recovered:{}", id),
+        NotificationType::HashrateDrop(id) => format!("hashrate_drop:{}", id),
+        NotificationType::MinerCrash(id) => format!("miner_crash:{}", id),
+        NotificationType::MinerStopped(id) => format!("miner_stopped:{}", id),
+        NotificationType::RemoteOffline(id) => format!("remote_offline:{}", id),
+        NotificationType::UpdateAvailable => "update_available".to_string(),
+    }
 }
 
 /// Rate limiter to prevent notification spam
 pub struct NotificationManager {
     settings: NotificationSettings,
-    last_sent: Mutex<HashMap<NotificationType, Instant>>,
+    last_sent: Mutex<HashMap<String, Instant>>, // dedup_key -> last sent time
     cooldown: Duration,
     app_identifier: String,
 }
@@ -97,7 +110,7 @@ impl NotificationManager {
     }
 
     /// Check if notification should be sent (rate limiting + dedup)
-    fn should_send(&self, notification_type: NotificationType) -> bool {
+    fn should_send(&self, notification_type: &NotificationType) -> bool {
         if !self.settings.enabled {
             return false;
         }
@@ -108,10 +121,10 @@ impl NotificationManager {
 
         // Check type-specific settings
         let type_enabled = match notification_type {
-            NotificationType::PoolDown | NotificationType::PoolRecovered => self.settings.pool_down,
-            NotificationType::HashrateDrop => self.settings.hashrate_drop,
-            NotificationType::MinerCrash | NotificationType::MinerStopped => self.settings.miner_crash,
-            NotificationType::RemoteOffline => self.settings.remote_offline,
+            NotificationType::PoolDown(_) | NotificationType::PoolRecovered(_) => self.settings.pool_down,
+            NotificationType::HashrateDrop(_) => self.settings.hashrate_drop,
+            NotificationType::MinerCrash(_) | NotificationType::MinerStopped(_) => self.settings.miner_crash,
+            NotificationType::RemoteOffline(_) => self.settings.remote_offline,
             NotificationType::UpdateAvailable => self.settings.update_available,
         };
 
@@ -119,16 +132,17 @@ impl NotificationManager {
             return false;
         }
 
-        // Rate limiting
+        // Rate limiting with dedup key
+        let key = dedup_key(notification_type);
         let mut last_sent = self.last_sent.lock().unwrap();
-        if let Some(last) = last_sent.get(&notification_type) {
+        if let Some(last) = last_sent.get(&key) {
             if last.elapsed() < self.cooldown {
-                info!("Notification {:?} rate limited", notification_type);
+                info!("Notification {} rate limited", key);
                 return false;
             }
         }
 
-        last_sent.insert(notification_type, Instant::now());
+        last_sent.insert(key, Instant::now());
         true
     }
 
@@ -144,52 +158,71 @@ impl NotificationManager {
         }
     }
 
-    // Public notification methods
+    // Public notification methods (session-aware)
 
-    pub fn notify_pool_down(&self, pool: &str) {
-        if self.should_send(NotificationType::PoolDown) {
-            self.send("Pool Connection Lost", &format!("Lost connection to {}", pool));
+    pub fn notify_pool_down(&self, session_id: &str, symbol: &str, pool: &str) {
+        if self.should_send(&NotificationType::PoolDown(session_id.to_string())) {
+            self.send(
+                &format!("{}: Pool Connection Lost", symbol),
+                &format!("Lost connection to {}", pool),
+            );
         }
     }
 
-    pub fn notify_pool_recovered(&self, pool: &str) {
-        if self.should_send(NotificationType::PoolRecovered) {
-            self.send("Pool Reconnected", &format!("Connected to {}", pool));
+    pub fn notify_pool_recovered(&self, session_id: &str, symbol: &str, pool: &str) {
+        if self.should_send(&NotificationType::PoolRecovered(session_id.to_string())) {
+            self.send(
+                &format!("{}: Pool Reconnected", symbol),
+                &format!("Connected to {}", pool),
+            );
         }
     }
 
-    pub fn notify_hashrate_drop(&self, current: f64, average: f64) {
-        if self.should_send(NotificationType::HashrateDrop) {
-            let drop_pct = ((average - current) / average * 100.0).abs();
-            if drop_pct >= self.settings.hashrate_drop_threshold {
+    pub fn notify_hashrate_drop(&self, session_id: &str, symbol: &str, current: f64, average: f64) {
+        let drop_pct = ((average - current) / average * 100.0).abs();
+        if drop_pct >= self.settings.hashrate_drop_threshold {
+            if self.should_send(&NotificationType::HashrateDrop(session_id.to_string())) {
                 self.send(
-                    "Hashrate Drop Detected",
+                    &format!("{}: Hashrate Drop", symbol),
                     &format!("Current: {:.1} H/s (down {:.0}%)", current, drop_pct),
                 );
             }
         }
     }
 
-    pub fn notify_miner_crash(&self, error: &str) {
-        if self.should_send(NotificationType::MinerCrash) {
-            self.send("Miner Stopped Unexpectedly", error);
+    pub fn notify_miner_crash(&self, session_id: &str, symbol: &str, error: &str) {
+        if self.should_send(&NotificationType::MinerCrash(session_id.to_string())) {
+            self.send(
+                &format!("{}: Miner Stopped Unexpectedly", symbol),
+                error,
+            );
         }
     }
 
     pub fn notify_miner_stopped(&self) {
-        if self.should_send(NotificationType::MinerStopped) {
+        // Legacy: no session context
+        if self.should_send(&NotificationType::MinerStopped("legacy".to_string())) {
             self.send("Mining Stopped", "Mining has been stopped");
         }
     }
 
+    pub fn notify_session_stopped(&self, session_id: &str, symbol: &str) {
+        if self.should_send(&NotificationType::MinerStopped(session_id.to_string())) {
+            self.send(
+                &format!("{}: Mining Stopped", symbol),
+                "Session has been stopped",
+            );
+        }
+    }
+
     pub fn notify_remote_offline(&self, name: &str) {
-        if self.should_send(NotificationType::RemoteOffline) {
+        if self.should_send(&NotificationType::RemoteOffline(name.to_string())) {
             self.send("Remote Miner Offline", &format!("{} is not responding", name));
         }
     }
 
     pub fn notify_update_available(&self, version: &str) {
-        if self.should_send(NotificationType::UpdateAvailable) {
+        if self.should_send(&NotificationType::UpdateAvailable) {
             self.send("Update Available", &format!("Version {} is available", version));
         }
     }

@@ -221,7 +221,36 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refreshStatus: async () => {
     try {
-      const status = await invoke<MiningStatus>('get_status')
+      const raw = await invoke<{
+        state: string
+        is_running: boolean
+        coin: string | null
+        pool: string | null
+        worker: string | null
+        hashrate: number
+        avg_hashrate: number
+        accepted_shares: number
+        rejected_shares: number
+        uptime: number
+        active_miner: string
+        warning: string | null
+      }>('get_status')
+      
+      // Map snake_case to camelCase
+      const status: MiningStatus = {
+        state: raw.state as MinerState,
+        isRunning: raw.is_running,
+        coin: raw.coin,
+        pool: raw.pool,
+        worker: raw.worker,
+        hashrate: raw.hashrate,
+        avgHashrate: raw.avg_hashrate,
+        acceptedShares: raw.accepted_shares,
+        rejectedShares: raw.rejected_shares,
+        uptime: raw.uptime,
+        activeMiner: raw.active_miner,
+        warning: raw.warning,
+      }
       set({ status })
     } catch (e) {
       console.error('Failed to get status:', e)
