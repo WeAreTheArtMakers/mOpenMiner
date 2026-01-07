@@ -39,6 +39,9 @@ Config location: `~/Library/Application Support/openminedash/config.json`
 - ⚡ Performance presets: Eco / Balanced / Max
 - 🔧 Manual binary path option for enterprise environments
 
+##  ![openMiner](https://raw.githubusercontent.com/WeAreTheArtMakers/mOpenMiner/main/openMiner.png)
+
+
 ## Supported Coins
 
 | Coin | Algorithm | Mining Method |
