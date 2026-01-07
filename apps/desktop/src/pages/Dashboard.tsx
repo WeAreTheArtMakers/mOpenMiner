@@ -134,6 +134,16 @@ export function Dashboard() {
                 {status.activeMiner}
               </span>
             )}
+            {/* Connection status badge */}
+            {status.acceptedShares > 0 ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-500">
+                Connected
+              </span>
+            ) : status.uptime > 5 ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500">
+                Connecting...
+              </span>
+            ) : null}
           </div>
           <button
             onClick={() => {
@@ -256,7 +266,16 @@ export function Dashboard() {
         <div className="grid grid-cols-3 gap-4">
           <KPICard label="Hashrate" value={`${status.hashrate.toFixed(1)} H/s`} />
           <KPICard label="Accepted" value={status.acceptedShares.toString()} accent="green" />
-          <KPICard label="Uptime" value={formatUptime(status.uptime)} />
+          <KPICard label="Rejected" value={status.rejectedShares.toString()} accent={status.rejectedShares > 0 ? "red" : undefined} />
+        </div>
+      )}
+
+      {/* Secondary stats row */}
+      {status.isRunning && (
+        <div className="grid grid-cols-3 gap-4">
+          <KPICard label="Avg Hashrate" value={status.avgHashrate > 0 ? `${status.avgHashrate.toFixed(1)} H/s` : '—'} small />
+          <KPICard label="Uptime" value={formatUptime(status.uptime)} small />
+          <KPICard label="Efficiency" value={status.acceptedShares > 0 ? `${((status.acceptedShares / (status.acceptedShares + status.rejectedShares)) * 100).toFixed(1)}%` : '—'} small />
         </div>
       )}
 
@@ -337,12 +356,19 @@ function StatusIndicator({ state }: { state: MinerState }) {
   return <span className="h-3 w-3 rounded-full bg-gray-400" />
 }
 
-function KPICard({ label, value, accent }: { label: string; value: string; accent?: 'green' | 'red' }) {
+function KPICard({ label, value, accent, small }: { label: string; value: string; accent?: 'green' | 'red'; small?: boolean }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-surface-elevated p-4 text-center">
-      <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">{label}</p>
+    <div className={clsx(
+      'rounded-xl border border-[var(--border)] bg-surface-elevated text-center',
+      small ? 'p-3' : 'p-4'
+    )}>
       <p className={clsx(
-        'mt-1 font-mono text-2xl font-bold',
+        'font-medium uppercase tracking-wider text-[var(--text-secondary)]',
+        small ? 'text-[10px]' : 'text-xs'
+      )}>{label}</p>
+      <p className={clsx(
+        'mt-1 font-mono font-bold',
+        small ? 'text-lg' : 'text-2xl',
         accent === 'green' && 'text-green-500',
         accent === 'red' && 'text-red-500'
       )}>

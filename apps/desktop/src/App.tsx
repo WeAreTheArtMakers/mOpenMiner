@@ -6,6 +6,7 @@ import { ConsentDialog } from '@/components/ConsentDialog'
 import { CrashRecoveryDialog } from '@/components/CrashRecoveryDialog'
 import { Sidebar } from '@/components/Sidebar'
 import { Dashboard } from '@/pages/Dashboard'
+import { Earnings } from '@/pages/Earnings'
 import { Profiles } from '@/pages/Profiles'
 import { Pools } from '@/pages/Pools'
 import { Logs } from '@/pages/Logs'
@@ -44,6 +45,7 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard': return <Dashboard />
+      case 'earnings': return <Earnings />
       case 'profiles': return <Profiles />
       case 'pools': return <Pools />
       case 'logs': return <Logs />

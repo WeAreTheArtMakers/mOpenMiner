@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/tauri'
 
-export type Page = 'dashboard' | 'profiles' | 'pools' | 'logs' | 'settings' | 'about'
+export type Page = 'dashboard' | 'earnings' | 'profiles' | 'pools' | 'logs' | 'settings' | 'about'
 export type MinerState = 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
 export type PerformancePreset = 'eco' | 'balanced' | 'max'
 
