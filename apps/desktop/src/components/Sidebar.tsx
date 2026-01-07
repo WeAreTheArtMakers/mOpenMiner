@@ -74,12 +74,12 @@ export function Sidebar() {
   return (
     <aside className="flex w-56 flex-col border-r border-[var(--border)] bg-surface-elevated">
       <div className="flex h-14 items-center gap-2 px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-amber-600">
           <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <span className="font-semibold">OpenMineDash</span>
+        <span className="font-semibold">OpenMiner</span>
       </div>
 
       <nav className="flex-1 px-2 py-4" role="navigation" aria-label="Main navigation">
