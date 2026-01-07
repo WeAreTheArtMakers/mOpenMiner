@@ -234,6 +234,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         uptime: number
         active_miner: string
         warning: string | null
+        started_at: number
       }>('get_status')
       
       // Map snake_case to camelCase

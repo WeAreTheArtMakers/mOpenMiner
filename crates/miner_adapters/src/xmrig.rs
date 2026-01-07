@@ -222,9 +222,38 @@ impl XMRigAdapter {
             }
         };
 
+        // Map algorithm names to XMRig format
+        let coin_lower = config.coin.to_lowercase();
+        let algo = match coin_lower.as_str() {
+            "verushash" | "verushash/2" | "verushash/2.1" => "verushash".to_string(),
+            "randomx" | "rx/0" => "rx/0".to_string(),
+            "ghostrider" | "gr" => "gr".to_string(),
+            other => other.to_string(),
+        };
+
+        // Check if XMRig supports this algorithm by running a dry-run
+        if algo == "verushash" {
+            let output = std::process::Command::new(&binary)
+                .args(["--algo=verushash", "-o", "stratum+tcp://test:1234", "-u", "test", "-p", "x", "--dry-run"])
+                .output();
+            
+            if let Ok(out) = output {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                info!("XMRig dry-run output for verushash check: {}", stdout);
+                // If XMRig doesn't support verushash, it will show "algo auto" instead
+                if stdout.contains("algo auto") || !stdout.contains("verushash") {
+                    self.state = MinerState::Error;
+                    return Err(AdapterError::Process(
+                        "This XMRig binary doesn't support VerusHash. You need xmrig-verus or a custom build with VerusHash enabled. Download from: https://github.com/veruscoin/xmrig/releases".to_string()
+                    ));
+                }
+            }
+        }
+
         // Find available port for HTTP API
         let api_port = Self::find_available_port();
-        info!("Starting XMRig with pool: {}, preset: {:?}, API port: {}", config.pool, config.preset, api_port);
+        info!("Starting XMRig with pool: {}, preset: {:?}, API port: {}, algorithm: {}", 
+              config.pool, config.preset, api_port, algo);
 
         // Calculate threads based on preset
         let available_threads = num_cpus::get() as u32;
@@ -233,19 +262,33 @@ impl XMRigAdapter {
         } else {
             ((available_threads as f32) * config.preset.thread_multiplier()).max(1.0) as u32
         };
+        
+        info!("XMRig command: --algo {} -o {} -u {} -p {} -t {}", 
+              algo, config.pool, config.wallet, config.worker, threads);
+
+        // Check if pool uses TLS
+        let use_tls = config.pool.starts_with("stratum+ssl://") || config.pool.starts_with("stratum+tls://");
 
         let mut cmd = Command::new(&binary);
-        cmd.args([
-            "-o", &config.pool,
-            "-u", &config.wallet,
-            "-p", &config.worker,
-            "-t", &threads.to_string(),
-            "--cpu-priority", &config.preset.cpu_priority().to_string(),
-            "--http-enabled",
-            "--http-host", "127.0.0.1",
-            "--http-port", &api_port.to_string(),
-            "--no-color",
-        ])
+        let mut args = vec![
+            "--algo".to_string(), algo,
+            "-o".to_string(), config.pool.clone(),
+            "-u".to_string(), config.wallet.clone(),
+            "-p".to_string(), config.worker.clone(),
+            "-t".to_string(), threads.to_string(),
+            "--cpu-priority".to_string(), config.preset.cpu_priority().to_string(),
+            "--http-enabled".to_string(),
+            "--http-host".to_string(), "127.0.0.1".to_string(),
+            "--http-port".to_string(), api_port.to_string(),
+            "--no-color".to_string(),
+            "--print-time=5".to_string(),
+        ];
+        
+        if use_tls {
+            args.push("--tls".to_string());
+        }
+        
+        cmd.args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
@@ -345,18 +388,32 @@ impl XMRigAdapter {
         }
 
         let api_port = CURRENT_API_PORT.load(Ordering::SeqCst);
+        let url = format!("http://127.0.0.1:{}/2/summary", api_port);
+        
         let client = reqwest::Client::new();
-        let resp = client
-            .get(format!("http://127.0.0.1:{}/2/summary", api_port))
+        let resp = match client
+            .get(&url)
             .timeout(Duration::from_secs(2))
             .send()
             .await
-            .map_err(|e| AdapterError::Process(e.to_string()))?;
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Failed to connect to XMRig API at {}: {}", url, e);
+                return Err(AdapterError::Process(e.to_string()));
+            }
+        };
 
-        let stats = resp
-            .json()
-            .await
-            .map_err(|e| AdapterError::Process(e.to_string()))?;
+        let stats: XMRigStats = match resp.json().await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to parse XMRig stats: {}", e);
+                return Err(AdapterError::Process(e.to_string()));
+            }
+        };
+        
+        info!("XMRig stats: hashrate={:?}, uptime={}, pool={}", 
+              stats.hashrate.total, stats.connection.uptime, stats.connection.pool);
 
         Ok(stats)
     }
@@ -379,26 +436,35 @@ impl Drop for XMRigAdapter {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct XMRigStats {
+    #[serde(default)]
     pub hashrate: XMRigHashrate,
+    #[serde(default)]
     pub results: XMRigResults,
+    #[serde(default)]
     pub connection: XMRigConnection,
+    #[serde(default)]
     pub cpu: Option<XMRigCpu>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct XMRigHashrate {
+    #[serde(default)]
     pub total: Vec<Option<f64>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct XMRigResults {
+    #[serde(default, rename = "shares_good")]
     pub shares_good: u64,
+    #[serde(default, rename = "shares_total")]
     pub shares_total: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct XMRigConnection {
+    #[serde(default)]
     pub uptime: u64,
+    #[serde(default)]
     pub pool: String,
 }
 

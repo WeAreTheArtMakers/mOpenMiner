@@ -84,8 +84,10 @@ pub enum ActiveMiner {
 
 impl From<MiningConfig> for AdapterMiningConfig {
     fn from(c: MiningConfig) -> Self {
+        let algo = if c.algorithm.is_empty() { c.coin.clone() } else { c.algorithm.clone() };
+        tracing::info!("MiningConfig conversion: coin={}, algorithm={}, using={}", c.coin, c.algorithm, algo);
         AdapterMiningConfig {
-            coin: if c.algorithm.is_empty() { c.coin } else { c.algorithm },
+            coin: algo,
             pool: c.pool,
             wallet: c.wallet,
             worker: c.worker,
@@ -113,6 +115,9 @@ pub struct MiningStatus {
     /// Warning message for non-practical mining
     #[serde(default)]
     pub warning: Option<String>,
+    /// Timestamp when mining started (for elapsed time calculation)
+    #[serde(default)]
+    pub started_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -376,6 +381,10 @@ impl AppState {
         };
 
         self.miner_process = Some(child);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         self.status = MiningStatus {
             state: "running".to_string(),
             is_running: true,
@@ -384,6 +393,7 @@ impl AppState {
             worker: Some(config.worker),
             active_miner: miner_name,
             warning,
+            started_at: now,
             ..Default::default()
         };
 
@@ -421,6 +431,19 @@ impl AppState {
     }
 
     pub async fn refresh_stats(&mut self) -> Result<()> {
+        // Calculate elapsed time since mining started (independent of pool connection)
+        if self.status.is_running && self.status.started_at > 0 {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let elapsed = now.saturating_sub(self.status.started_at);
+            // Use elapsed time if XMRig uptime is 0 (not connected to pool yet)
+            if self.status.uptime == 0 {
+                self.status.uptime = elapsed;
+            }
+        }
+
         match self.active_miner {
             ActiveMiner::XMRig => {
                 if self.xmrig_adapter.state() != MinerState::Running {
@@ -433,7 +456,10 @@ impl AppState {
                         self.status.avg_hashrate = stats.avg_hashrate();
                         self.status.accepted_shares = stats.accepted_shares();
                         self.status.rejected_shares = stats.rejected_shares();
-                        self.status.uptime = stats.connection.uptime;
+                        // Use XMRig's uptime if connected, otherwise keep elapsed time
+                        if stats.connection.uptime > 0 {
+                            self.status.uptime = stats.connection.uptime;
+                        }
                         tracing::debug!(
                             "XMRig stats: hashrate={}, accepted={}, uptime={}",
                             self.status.hashrate,

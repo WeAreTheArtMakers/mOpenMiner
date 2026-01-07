@@ -39,5 +39,5 @@
       "region": "eu"
     }
   ],
-  "notes": "VerusHash 2.1 algorithm - CPU optimized, ASIC resistant. Excellent for Apple Silicon."
+  "notes": "VerusHash 2.1 algorithm - CPU optimized, ASIC resistant. Requires xmrig-verus (not standard XMRig). Download from: https://github.com/veruscoin/xmrig/releases"
 }
