@@ -1,4 +1,4 @@
-# OpenMine
+# OpenMiner
 
 A transparent, open-source mining dashboard and manager for macOS (Apple Silicon).
 
