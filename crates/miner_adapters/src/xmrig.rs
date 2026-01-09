@@ -417,6 +417,81 @@ impl XMRigAdapter {
 
         Ok(stats)
     }
+
+    /// Change thread count at runtime via XMRig HTTP API
+    pub async fn set_threads(&self, threads: u32) -> Result<()> {
+        if self.state != MinerState::Running {
+            return Err(AdapterError::Process("Miner not running".to_string()));
+        }
+
+        let api_port = CURRENT_API_PORT.load(Ordering::SeqCst);
+        let url = format!("http://127.0.0.1:{}/2/config", api_port);
+        
+        let client = reqwest::Client::new();
+        
+        // First get current config
+        let resp = match client
+            .get(&url)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Failed to get XMRig config: {}", e);
+                return Err(AdapterError::Process(e.to_string()));
+            }
+        };
+
+        let mut config: serde_json::Value = match resp.json().await {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to parse XMRig config: {}", e);
+                return Err(AdapterError::Process(e.to_string()));
+            }
+        };
+
+        // Update thread count in CPU config
+        if let Some(cpu) = config.get_mut("cpu") {
+            // XMRig uses different formats, try to update threads
+            if let Some(obj) = cpu.as_object_mut() {
+                // Set max-threads-hint which controls thread count
+                obj.insert("max-threads-hint".to_string(), serde_json::json!(threads * 100 / num_cpus::get() as u32));
+            }
+        }
+
+        // Send updated config
+        let resp = match client
+            .put(&url)
+            .json(&config)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Failed to update XMRig config: {}", e);
+                return Err(AdapterError::Process(e.to_string()));
+            }
+        };
+
+        if resp.status().is_success() {
+            info!("XMRig threads updated to {}", threads);
+            Ok(())
+        } else {
+            Err(AdapterError::Process(format!("Failed to update threads: {}", resp.status())))
+        }
+    }
+
+    /// Change performance preset at runtime
+    pub async fn set_preset(&self, preset: PerformancePreset) -> Result<u32> {
+        let available_threads = num_cpus::get() as u32;
+        let threads = ((available_threads as f32) * preset.thread_multiplier()).max(1.0) as u32;
+        
+        self.set_threads(threads).await?;
+        
+        Ok(threads)
+    }
 }
 
 impl Default for XMRigAdapter {

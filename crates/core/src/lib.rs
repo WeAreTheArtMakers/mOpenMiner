@@ -565,6 +565,32 @@ impl AppState {
     pub fn clear_mining_history(&mut self) {
         self.mining_history.clear();
     }
+
+    /// Change performance preset while mining is running
+    pub async fn change_preset(&mut self, preset: PerformancePreset) -> Result<()> {
+        if !self.status.is_running {
+            return Err(CoreError::NotRunning);
+        }
+
+        match self.active_miner {
+            ActiveMiner::XMRig => {
+                self.xmrig_adapter
+                    .set_preset(preset)
+                    .await
+                    .map_err(|e| CoreError::Miner(e.to_string()))?;
+                tracing::info!("Changed XMRig preset to {:?}", preset);
+                Ok(())
+            }
+            ActiveMiner::CpuminerOpt => {
+                // cpuminer-opt doesn't support runtime thread changes
+                // Would need to restart
+                Err(CoreError::Miner(
+                    "cpuminer-opt doesn't support runtime preset changes. Stop and restart mining.".to_string()
+                ))
+            }
+            ActiveMiner::None => Err(CoreError::NotRunning),
+        }
+    }
 }
 
 impl Default for AppState {

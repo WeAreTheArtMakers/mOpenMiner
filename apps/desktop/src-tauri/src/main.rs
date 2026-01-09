@@ -82,6 +82,7 @@ fn main() {
             get_mining_history,
             get_history_summary,
             clear_mining_history,
+            change_mining_preset,
         ])
         .setup(move |app| {
             // Set app handle for session manager

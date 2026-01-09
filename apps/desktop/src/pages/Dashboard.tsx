@@ -47,6 +47,7 @@ export function Dashboard() {
   const [reconnectCountdown] = useState<number | null>(null)
   const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null)
   const [lastAcceptedShares, setLastAcceptedShares] = useState(0)
+  const [changingPreset, setChangingPreset] = useState(false)
 
   const selectedCoinData = coins.find((c) => c.id === selectedCoin)
   const isExternalMiner = selectedCoinData?.recommended_miner === 'external-asic' || selectedCoinData?.recommended_miner === 'external-gpu'
@@ -80,6 +81,26 @@ export function Dashboard() {
     }
     setLastAcceptedShares(status.acceptedShares)
   }, [status.acceptedShares, lastAcceptedShares])
+
+  // Change preset while mining
+  const handlePresetChange = async (newPreset: PerformancePreset) => {
+    if (!status.isRunning) {
+      setPreset(newPreset)
+      return
+    }
+    
+    setChangingPreset(true)
+    try {
+      await invoke('change_mining_preset', { preset: newPreset })
+      setPreset(newPreset)
+      invoke('play_notification_sound', { sound: 'success' }).catch(() => {})
+    } catch (e) {
+      console.error('Failed to change preset:', e)
+      alert(`Failed to change preset: ${e}`)
+    } finally {
+      setChangingPreset(false)
+    }
+  }
 
   // Auto-refresh stats when running (legacy + sessions)
   useEffect(() => {
@@ -294,6 +315,41 @@ export function Dashboard() {
         <HashrateChart data={hashrateHistory} />
       )}
 
+      {/* Live Preset Control - Only when mining */}
+      {status.isRunning && (
+        <section className="rounded-xl border border-[var(--border)] bg-surface-elevated p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium">Performance</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Change CPU usage while mining</p>
+            </div>
+            <div className="flex gap-2">
+              {(['eco', 'balanced', 'max'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => handlePresetChange(p)}
+                  disabled={changingPreset}
+                  className={clsx(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                    preset === p
+                      ? 'bg-accent text-white'
+                      : 'bg-surface hover:bg-[var(--border)] text-[var(--text-secondary)]',
+                    changingPreset && 'opacity-50 cursor-wait'
+                  )}
+                >
+                  {p === 'eco' ? '🌱 Eco' : p === 'balanced' ? '⚖️ Balanced' : '🚀 Max'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-2 flex gap-4 text-xs text-[var(--text-secondary)]">
+            <span>Eco: ~25% CPU</span>
+            <span>Balanced: ~50% CPU</span>
+            <span>Max: ~75% CPU</span>
+          </div>
+        </section>
+      )}
+
       {/* Reconnect countdown */}
       {reconnectCountdown !== null && (
         <div className="rounded-lg bg-yellow-500/10 p-3 text-center text-sm text-yellow-600 dark:text-yellow-400">
@@ -313,7 +369,7 @@ export function Dashboard() {
         worker={worker}
         setWorker={setWorker}
         preset={preset}
-        setPreset={setPreset}
+        setPreset={handlePresetChange}
         isRunning={status.isRunning}
         isTransitioning={isTransitioning}
         isExternalMiner={isExternalMiner}

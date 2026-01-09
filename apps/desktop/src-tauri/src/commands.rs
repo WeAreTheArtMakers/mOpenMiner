@@ -7,6 +7,7 @@ use openminedash_core::{
     ThreadBudgetSettings, calculate_budget, BudgetMode, BudgetPreset,
     MiningRecord, HistorySummary,
 };
+use openminedash_miner_adapters::PerformancePreset;
 use openminedash_pools::PoolHealthResult;
 use openminedash_pools::PoolBalance;
 use std::path::PathBuf;
@@ -451,4 +452,21 @@ pub async fn clear_mining_history(
     let mut state = state.lock().await;
     state.clear_mining_history();
     Ok(())
+}
+
+#[tauri::command]
+pub async fn change_mining_preset(
+    state: State<'_, AppStateHandle>,
+    preset: String,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    
+    let preset = match preset.as_str() {
+        "eco" => PerformancePreset::Eco,
+        "balanced" => PerformancePreset::Balanced,
+        "max" => PerformancePreset::Max,
+        _ => return Err("Invalid preset. Use: eco, balanced, or max".to_string()),
+    };
+    
+    state.change_preset(preset).await.map_err(|e| e.to_string())
 }
