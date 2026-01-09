@@ -122,6 +122,11 @@ openminedash/
 └── docs/                  # Documentation
 ```
 
+
+
+##  ![openMiner](https://raw.githubusercontent.com/WeAreTheArtMakers/mOpenMiner/main/OpenMiner-Earning.png) 
+
+
 ## License
 
 MIT License - See [LICENSE](LICENSE)
