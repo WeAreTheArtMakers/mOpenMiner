@@ -5,6 +5,7 @@ use openminedash_core::{
     SessionConfig, SessionDetails, SessionManager, SessionSummary, LogsResponse,
     create_diagnostics_export, Alert, AlertSeverity, AlertStore, BudgetStatus,
     ThreadBudgetSettings, calculate_budget, BudgetMode, BudgetPreset,
+    MiningRecord, HistorySummary,
 };
 use openminedash_pools::PoolHealthResult;
 use std::path::PathBuf;
@@ -388,4 +389,33 @@ pub async fn get_budget_status(
     
     let config = openminedash_core::AppConfig::load().unwrap_or_default();
     Ok(calculate_budget(&config.thread_budget, active_count, total_threads))
+}
+
+// ============================================================================
+// Mining History Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn get_mining_history(
+    state: State<'_, AppStateHandle>,
+) -> Result<Vec<MiningRecord>, String> {
+    let state = state.lock().await;
+    Ok(state.get_history_records().to_vec())
+}
+
+#[tauri::command]
+pub async fn get_history_summary(
+    state: State<'_, AppStateHandle>,
+) -> Result<HistorySummary, String> {
+    let state = state.lock().await;
+    Ok(state.get_history_summary())
+}
+
+#[tauri::command]
+pub async fn clear_mining_history(
+    state: State<'_, AppStateHandle>,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.clear_mining_history();
+    Ok(())
 }

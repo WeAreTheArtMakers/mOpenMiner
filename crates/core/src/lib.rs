@@ -4,6 +4,7 @@ mod benchmark;
 mod config;
 mod crash_recovery;
 mod diagnostics;
+mod mining_history;
 mod plugin;
 mod process;
 mod remote;
@@ -17,6 +18,7 @@ pub use benchmark::*;
 pub use config::*;
 pub use crash_recovery::*;
 pub use diagnostics::*;
+pub use mining_history::*;
 pub use plugin::*;
 pub use process::*;
 pub use remote::*;
@@ -168,12 +170,14 @@ pub struct AppState {
     active_miner: ActiveMiner,
     crash_recovery: CrashRecoveryState,
     remote_endpoints: Vec<RemoteEndpoint>,
+    mining_history: MiningHistory,
 }
 
 impl AppState {
     pub fn new() -> Self {
         let config = AppConfig::load().unwrap_or_default();
         let crash_recovery = check_crash_recovery();
+        let mining_history = MiningHistory::load();
         
         Self {
             config,
@@ -187,6 +191,7 @@ impl AppState {
             active_miner: ActiveMiner::None,
             crash_recovery,
             remote_endpoints: Vec::new(),
+            mining_history,
         }
     }
 
@@ -409,6 +414,34 @@ impl AppState {
             return Ok(());
         }
 
+        // Save mining record before stopping
+        if self.status.is_running && self.status.started_at > 0 {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            let record = MiningRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                coin: self.status.coin.clone().unwrap_or_default(),
+                symbol: self.status.coin.clone().unwrap_or_default().to_uppercase(),
+                pool: self.status.pool.clone().unwrap_or_default(),
+                wallet: "".to_string(), // We don't store wallet in status currently
+                worker: self.status.worker.clone().unwrap_or_default(),
+                started_at: self.status.started_at,
+                ended_at: now,
+                duration_secs: now.saturating_sub(self.status.started_at),
+                accepted_shares: self.status.accepted_shares,
+                rejected_shares: self.status.rejected_shares,
+                avg_hashrate: self.status.avg_hashrate,
+                algorithm: "".to_string(),
+            };
+            
+            if record.duration_secs > 10 { // Only save sessions longer than 10 seconds
+                self.mining_history.add_record(record);
+            }
+        }
+
         self.status.state = "stopping".to_string();
 
         if let Some(mut child) = self.miner_process.take() {
@@ -504,6 +537,23 @@ impl AppState {
             .find(|e| e.id == endpoint_id)
             .map(|e| fetch_remote_stats(e))
             .map(|f| futures::executor::block_on(f))
+    }
+
+    // Mining history
+    pub fn mining_history(&self) -> &MiningHistory {
+        &self.mining_history
+    }
+
+    pub fn get_history_summary(&self) -> HistorySummary {
+        self.mining_history.get_summary()
+    }
+
+    pub fn get_history_records(&self) -> &[MiningRecord] {
+        &self.mining_history.records
+    }
+
+    pub fn clear_mining_history(&mut self) {
+        self.mining_history.clear();
     }
 }
 

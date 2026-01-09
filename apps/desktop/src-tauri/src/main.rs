@@ -75,6 +75,10 @@ fn main() {
             get_thread_budget_settings,
             set_thread_budget_settings,
             get_budget_status,
+            // Mining history commands
+            get_mining_history,
+            get_history_summary,
+            clear_mining_history,
         ])
         .setup(move |app| {
             // Set app handle for session manager
