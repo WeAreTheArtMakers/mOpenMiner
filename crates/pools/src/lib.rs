@@ -1,6 +1,8 @@
+mod api;
 mod health;
 mod stratum;
 
+pub use api::*;
 pub use health::*;
 pub use stratum::*;
 

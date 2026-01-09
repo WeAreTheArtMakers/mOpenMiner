@@ -8,6 +8,7 @@ use openminedash_core::{
     MiningRecord, HistorySummary,
 };
 use openminedash_pools::PoolHealthResult;
+use openminedash_pools::PoolBalance;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Manager, State};
@@ -135,6 +136,13 @@ pub async fn save_profile(state: State<'_, AppStateHandle>, profile: Profile) ->
 }
 
 #[tauri::command]
+pub async fn delete_profile(state: State<'_, AppStateHandle>, profile_id: String) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.delete_profile(&profile_id);
+    state.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_profiles(state: State<'_, AppStateHandle>) -> Result<Vec<Profile>, String> {
     let state = state.lock().await;
     Ok(state.profiles().to_vec())
@@ -143,6 +151,11 @@ pub async fn list_profiles(state: State<'_, AppStateHandle>) -> Result<Vec<Profi
 #[tauri::command]
 pub async fn check_pool_health(url: String) -> Result<PoolHealthResult, String> {
     openminedash_pools::check_health(&url).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn fetch_pool_balance(pool_host: String, wallet: String) -> Result<PoolBalance, String> {
+    openminedash_pools::fetch_pool_balance(&pool_host, &wallet).await
 }
 
 #[tauri::command]
@@ -198,6 +211,26 @@ pub async fn send_test_notification(
 ) -> Result<(), String> {
     let notif = notifications.lock().await;
     notif.send_test();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn play_notification_sound(
+    notifications: State<'_, NotificationHandle>,
+    sound: String,
+) -> Result<(), String> {
+    let notif = notifications.lock().await;
+    // Map friendly names to macOS sound names
+    let sound_name = match sound.as_str() {
+        "success" | "share_accepted" => "Glass",
+        "error" | "share_rejected" => "Basso",
+        "warning" => "Sosumi",
+        "start" => "Blow",
+        "stop" => "Bottle",
+        "coin" | "payment" => "Hero",
+        _ => &sound,
+    };
+    notif.play_sound(sound_name);
     Ok(())
 }
 

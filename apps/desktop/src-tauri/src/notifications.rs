@@ -146,16 +146,33 @@ impl NotificationManager {
         true
     }
 
-    /// Send a notification
+    /// Send a notification with optional sound
     fn send(&self, title: &str, body: &str) {
         match Notification::new(&self.app_identifier)
             .title(title)
             .body(body)
+            .sound("default") // macOS system sound
             .show()
         {
             Ok(_) => info!("Notification sent: {}", title),
             Err(e) => warn!("Failed to send notification: {}", e),
         }
+    }
+
+    /// Play a sound without notification (for in-app events)
+    #[cfg(target_os = "macos")]
+    pub fn play_sound(&self, sound_name: &str) {
+        use std::process::Command;
+        // Use afplay to play system sounds
+        let sound_path = format!("/System/Library/Sounds/{}.aiff", sound_name);
+        let _ = Command::new("afplay")
+            .arg(&sound_path)
+            .spawn();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn play_sound(&self, _sound_name: &str) {
+        // No-op on other platforms for now
     }
 
     // Public notification methods (session-aware)
@@ -230,7 +247,12 @@ impl NotificationManager {
     /// Send a test notification (bypasses rate limiting)
     pub fn send_test(&self) {
         if self.settings.enabled {
+            // Play a pleasant sound
+            self.play_sound("Glass");
             self.send("Test Notification", "Notifications are working correctly!");
+        } else {
+            // Even if disabled, play sound to confirm it works
+            self.play_sound("Glass");
         }
     }
 }

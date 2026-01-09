@@ -58,6 +58,10 @@ export default function App() {
   const handleCrashRecoveryRestart = () => {
     if (crashRecovery?.last_session) {
       const session = crashRecovery.last_session
+      const { coins } = useAppStore.getState()
+      const coinData = coins.find(c => c.id === session.coin)
+      const algorithm = coinData?.algorithm || session.coin
+      
       startMining({
         coin: session.coin,
         pool: session.pool,
@@ -65,7 +69,7 @@ export default function App() {
         worker: session.worker,
         threads: 0, // Auto
         preset: currentPreset,
-        algorithm: '', // Will be resolved by backend
+        algorithm,
         tryAnyway: false,
       })
     }

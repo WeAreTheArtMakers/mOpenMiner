@@ -105,6 +105,7 @@ pub struct MiningStatus {
     pub is_running: bool,
     pub coin: Option<String>,
     pub pool: Option<String>,
+    pub wallet: Option<String>,
     pub worker: Option<String>,
     pub hashrate: f64,
     pub avg_hashrate: f64,
@@ -120,6 +121,9 @@ pub struct MiningStatus {
     /// Timestamp when mining started (for elapsed time calculation)
     #[serde(default)]
     pub started_at: u64,
+    /// Algorithm being mined
+    #[serde(default)]
+    pub algorithm: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,6 +246,10 @@ impl AppState {
         } else {
             self.config.profiles.push(profile);
         }
+    }
+
+    pub fn delete_profile(&mut self, profile_id: &str) {
+        self.config.profiles.retain(|p| p.id != profile_id);
     }
 
     pub fn save_config(&self) -> Result<()> {
@@ -394,8 +402,10 @@ impl AppState {
             state: "running".to_string(),
             is_running: true,
             coin: Some(config.coin),
-            pool: Some(config.pool),
+            pool: Some(config.pool.clone()),
+            wallet: Some(config.wallet),
             worker: Some(config.worker),
+            algorithm: Some(config.algorithm),
             active_miner: miner_name,
             warning,
             started_at: now,
@@ -426,7 +436,7 @@ impl AppState {
                 coin: self.status.coin.clone().unwrap_or_default(),
                 symbol: self.status.coin.clone().unwrap_or_default().to_uppercase(),
                 pool: self.status.pool.clone().unwrap_or_default(),
-                wallet: "".to_string(), // We don't store wallet in status currently
+                wallet: self.status.wallet.clone().unwrap_or_default(),
                 worker: self.status.worker.clone().unwrap_or_default(),
                 started_at: self.status.started_at,
                 ended_at: now,
@@ -434,7 +444,7 @@ impl AppState {
                 accepted_shares: self.status.accepted_shares,
                 rejected_shares: self.status.rejected_shares,
                 avg_hashrate: self.status.avg_hashrate,
-                algorithm: "".to_string(),
+                algorithm: self.status.algorithm.clone().unwrap_or_default(),
             };
             
             if record.duration_secs > 10 { // Only save sessions longer than 10 seconds

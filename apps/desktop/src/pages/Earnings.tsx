@@ -34,6 +34,44 @@ const COIN_DATA: Record<string, {
   },
 }
 
+// Pool info for tracking payments
+const POOL_INFO: Record<string, {
+  name: string
+  minPayout: string
+  dashboardUrl: (wallet: string) => string
+}> = {
+  'gulf.moneroocean.stream': {
+    name: 'MoneroOcean',
+    minPayout: '0.003 XMR',
+    dashboardUrl: (wallet) => `https://moneroocean.stream/#/dashboard?addr=${wallet}`,
+  },
+  'pool.supportxmr.com': {
+    name: 'SupportXMR',
+    minPayout: '0.1 XMR',
+    dashboardUrl: (wallet) => `https://supportxmr.com/#/dashboard?wallet=${wallet}`,
+  },
+  'xmr.nanopool.org': {
+    name: 'Nanopool',
+    minPayout: '0.1 XMR',
+    dashboardUrl: (wallet) => `https://xmr.nanopool.org/account/${wallet}`,
+  },
+  'na.luckpool.net': {
+    name: 'LuckPool',
+    minPayout: '0.5 VRSC',
+    dashboardUrl: (wallet) => `https://luckpool.net/verus/miner/${wallet}`,
+  },
+  'ap.luckpool.net': {
+    name: 'LuckPool',
+    minPayout: '0.5 VRSC',
+    dashboardUrl: (wallet) => `https://luckpool.net/verus/miner/${wallet}`,
+  },
+  'eu.luckpool.net': {
+    name: 'LuckPool',
+    minPayout: '0.5 VRSC',
+    dashboardUrl: (wallet) => `https://luckpool.net/verus/miner/${wallet}`,
+  },
+}
+
 interface MiningRecord {
   id: string
   coin: string
@@ -68,12 +106,35 @@ interface CoinSummary {
   wallets: string[]
 }
 
+interface PoolBalance {
+  pool_name: string
+  pending_balance: number
+  total_paid: number
+  min_payout: number
+  symbol: string
+  last_payment: number | null
+  hashrate: number | null
+}
+
+// Supported pools for balance checking
+const SUPPORTED_POOLS = [
+  { id: 'gulf.moneroocean.stream', name: 'MoneroOcean', coin: 'XMR', minPayout: 0.003 },
+  { id: 'pool.supportxmr.com', name: 'SupportXMR', coin: 'XMR', minPayout: 0.1 },
+  { id: 'xmr.nanopool.org', name: 'Nanopool XMR', coin: 'XMR', minPayout: 0.1 },
+]
+
 export function Earnings() {
   const { status, coins } = useAppStore()
   const [records, setRecords] = useState<MiningRecord[]>([])
   const [summary, setSummary] = useState<HistorySummary | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'all'>('all')
   const [loading, setLoading] = useState(true)
+  const [poolBalances, setPoolBalances] = useState<Record<string, PoolBalance | null>>({})
+  const [loadingBalances, setLoadingBalances] = useState<Set<string>>(new Set())
+  
+  // Manual wallet input for balance checking
+  const [manualPool, setManualPool] = useState('gulf.moneroocean.stream')
+  const [manualWallet, setManualWallet] = useState('')
 
   // Load history from backend
   useEffect(() => {
@@ -147,6 +208,51 @@ export function Earnings() {
     }
   }, [status.isRunning, status.coin, status.hashrate])
 
+  // Get unique pools and wallets from history AND current session for tracking
+  const poolTracking = useMemo(() => {
+    const tracking: { pool: string; wallet: string; coin: string; poolInfo: typeof POOL_INFO[string] | null }[] = []
+    const seen = new Set<string>()
+    
+    // Add from history
+    for (const record of records) {
+      const poolHost = record.pool.replace(/^stratum\+tcp:\/\//, '').replace(/^stratum\+ssl:\/\//, '').split(':')[0]
+      const key = `${poolHost}:${record.wallet}`
+      
+      if (!seen.has(key) && record.wallet) {
+        seen.add(key)
+        tracking.push({
+          pool: poolHost,
+          wallet: record.wallet,
+          coin: record.coin,
+          poolInfo: POOL_INFO[poolHost] || null,
+        })
+      }
+    }
+    
+    return tracking
+  }, [records])
+
+  // Fetch pool balance
+  const fetchBalance = async (poolHost: string, wallet: string) => {
+    const key = `${poolHost}:${wallet}`
+    if (loadingBalances.has(key)) return
+    
+    setLoadingBalances(prev => new Set(prev).add(key))
+    try {
+      const balance = await invoke<PoolBalance>('fetch_pool_balance', { poolHost, wallet })
+      setPoolBalances(prev => ({ ...prev, [key]: balance }))
+    } catch (e) {
+      console.error('Failed to fetch balance:', e)
+      setPoolBalances(prev => ({ ...prev, [key]: null }))
+    } finally {
+      setLoadingBalances(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
   const formatDuration = (secs: number) => {
     const hours = Math.floor(secs / 3600)
     const minutes = Math.floor((secs % 3600) / 60)
@@ -207,6 +313,208 @@ export function Earnings() {
           <p className="text-[var(--text-secondary)]">Start mining to see estimated earnings</p>
         </div>
       )}
+
+      {/* Pool Payment Tracking - Always show */}
+      <section className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-6">
+        <h2 className="text-lg font-semibold text-blue-500 mb-2">🔗 Check Pool Balance</h2>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">
+          Enter your wallet address to check your pending balance at the pool.
+        </p>
+        
+        {/* Manual balance check */}
+        <div className="p-4 rounded-lg bg-surface mb-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Pool</label>
+              <select
+                value={manualPool}
+                onChange={(e) => setManualPool(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border)] bg-surface-elevated px-3 py-2 text-sm"
+              >
+                {SUPPORTED_POOLS.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.coin})</option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium mb-1">Wallet Address</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualWallet}
+                  onChange={(e) => setManualWallet(e.target.value)}
+                  placeholder="Enter your XMR wallet address"
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-surface-elevated px-3 py-2 text-sm font-mono"
+                />
+                <button
+                  onClick={() => manualWallet && fetchBalance(manualPool, manualWallet)}
+                  disabled={!manualWallet || loadingBalances.has(`${manualPool}:${manualWallet}`)}
+                  className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingBalances.has(`${manualPool}:${manualWallet}`) ? '...' : 'Check'}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Show balance for manual check */}
+          {manualWallet && poolBalances[`${manualPool}:${manualWallet}`] && (
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              {(() => {
+                const balance = poolBalances[`${manualPool}:${manualWallet}`]!
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)]">Pending Balance</p>
+                        <p className="font-mono font-bold text-green-500 text-lg">
+                          {balance.pending_balance.toFixed(6)} {balance.symbol}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)]">Total Paid</p>
+                        <p className="font-mono font-medium">
+                          {balance.total_paid.toFixed(4)} {balance.symbol}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)]">Min Payout</p>
+                        <p className="font-mono text-sm">
+                          {balance.min_payout} {balance.symbol}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Progress to payout */}
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1">
+                        <span>Progress to payout</span>
+                        <span>{Math.min(100, (balance.pending_balance / balance.min_payout * 100)).toFixed(1)}%</span>
+                      </div>
+                      <div className="h-3 bg-[var(--border)] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, balance.pending_balance / balance.min_payout * 100)}%` }}
+                        />
+                      </div>
+                      {balance.pending_balance >= balance.min_payout && (
+                        <p className="mt-2 text-xs text-green-500 font-medium">
+                          ✓ Ready for payout! Check pool dashboard for payment schedule.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* Previously used pools from history */}
+        {poolTracking.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-[var(--text-secondary)]">Previously Used Pools</h3>
+            {poolTracking.map(({ pool, wallet, coin, poolInfo }, idx) => {
+              const balanceKey = `${pool}:${wallet}`
+              const balance = poolBalances[balanceKey]
+              const isLoading = loadingBalances.has(balanceKey)
+              
+              return (
+                <div key={idx} className="p-4 rounded-lg bg-surface">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{poolInfo?.name || pool}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-500">
+                          {coin.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-secondary)] truncate mt-1">
+                        {wallet.slice(0, 16)}...{wallet.slice(-8)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {poolInfo && (
+                        <button
+                          onClick={() => fetchBalance(pool, wallet)}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-medium hover:bg-blue-500/20 disabled:opacity-50"
+                        >
+                          {isLoading ? '...' : '↻ Refresh'}
+                        </button>
+                      )}
+                      {poolInfo ? (
+                        <a
+                          href={poolInfo.dashboardUrl(wallet)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors"
+                        >
+                          Dashboard →
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[var(--text-secondary)]">
+                          Check pool website
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Balance display */}
+                  {balance && (
+                    <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-xs text-[var(--text-secondary)]">Pending Balance</p>
+                          <p className="font-mono font-bold text-green-500">
+                            {balance.pending_balance.toFixed(6)} {balance.symbol}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[var(--text-secondary)]">Total Paid</p>
+                          <p className="font-mono font-medium">
+                            {balance.total_paid.toFixed(4)} {balance.symbol}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[var(--text-secondary)]">Min Payout</p>
+                          <p className="font-mono text-sm">
+                            {balance.min_payout} {balance.symbol}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Progress to payout */}
+                      {balance.pending_balance > 0 && (
+                        <div className="mt-3">
+                          <div className="flex justify-between text-xs text-[var(--text-secondary)] mb-1">
+                            <span>Progress to payout</span>
+                            <span>{Math.min(100, (balance.pending_balance / balance.min_payout * 100)).toFixed(1)}%</span>
+                          </div>
+                          <div className="h-2 bg-[var(--border)] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-green-500 rounded-full transition-all"
+                              style={{ width: `${Math.min(100, balance.pending_balance / balance.min_payout * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        
+        <div className="mt-4 p-3 rounded-lg bg-surface">
+          <p className="text-xs text-[var(--text-secondary)]">
+            <strong>💡 How payments work:</strong> Your mining shares accumulate at the pool. 
+            When your balance reaches the minimum payout threshold, the pool automatically 
+            sends coins to your wallet. This can take hours to days depending on your hashrate.
+          </p>
+        </div>
+      </section>
 
       {/* Mining History */}
       <section className="rounded-xl border border-[var(--border)] bg-surface-elevated p-6">

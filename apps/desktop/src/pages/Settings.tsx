@@ -85,6 +85,10 @@ export function Settings() {
     await invoke('send_test_notification')
   }
 
+  const handleTestSound = async (sound: string) => {
+    await invoke('play_notification_sound', { sound })
+  }
+
   const handleExportDiagnostics = async (maskWallets: boolean) => {
     setExportStatus('Exporting...')
     const data = await exportDiagnostics(maskWallets)
@@ -205,6 +209,27 @@ export function Settings() {
             <button onClick={handleTestNotification} className="btn-secondary mt-2">
               Send Test Notification
             </button>
+            
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              <p className="text-sm font-medium mb-2">Sound Effects</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => handleTestSound('success')} className="btn-secondary text-xs">
+                  🔔 Share Accepted
+                </button>
+                <button onClick={() => handleTestSound('error')} className="btn-secondary text-xs">
+                  ❌ Error
+                </button>
+                <button onClick={() => handleTestSound('start')} className="btn-secondary text-xs">
+                  ▶️ Start
+                </button>
+                <button onClick={() => handleTestSound('stop')} className="btn-secondary text-xs">
+                  ⏹️ Stop
+                </button>
+                <button onClick={() => handleTestSound('coin')} className="btn-secondary text-xs">
+                  💰 Payment
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </Section>

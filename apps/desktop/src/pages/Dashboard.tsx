@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/tauri'
-import { useAppStore, type PerformancePreset, type MinerState } from '@/stores/app'
+import { useAppStore, type PerformancePreset, type MinerState, type HashratePoint } from '@/stores/app'
 import { useSessionsStore, useActiveSessions, useTotalHashrate } from '@/stores/sessions'
 import { SessionCard } from '@/components/SessionCard'
 
@@ -23,7 +23,7 @@ const stateLabels: Record<MinerState, string> = {
 }
 
 export function Dashboard() {
-  const { status, coins, hasConsent, startMining, stopMining, refreshStatus, logs } = useAppStore()
+  const { status, coins, hasConsent, startMining, stopMining, refreshStatus, logs, hashrateHistory } = useAppStore()
   const { 
     hydrate: hydrateSessions, 
     stopSession, 
@@ -46,6 +46,7 @@ export function Dashboard() {
   const [preset, setPreset] = useState<PerformancePreset>('balanced')
   const [reconnectCountdown] = useState<number | null>(null)
   const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null)
+  const [lastAcceptedShares, setLastAcceptedShares] = useState(0)
 
   const selectedCoinData = coins.find((c) => c.id === selectedCoin)
   const isExternalMiner = selectedCoinData?.recommended_miner === 'external-asic' || selectedCoinData?.recommended_miner === 'external-gpu'
@@ -70,6 +71,15 @@ export function Dashboard() {
   useEffect(() => {
     invoke<BudgetStatus>('get_budget_status').then(setBudgetStatus).catch(console.error)
   }, [activeSessions.length])
+
+  // Play sound when share is accepted
+  useEffect(() => {
+    if (status.acceptedShares > lastAcceptedShares && lastAcceptedShares > 0) {
+      // New share accepted - play subtle sound
+      invoke('play_notification_sound', { sound: 'success' }).catch(() => {})
+    }
+    setLastAcceptedShares(status.acceptedShares)
+  }, [status.acceptedShares, lastAcceptedShares])
 
   // Auto-refresh stats when running (legacy + sessions)
   useEffect(() => {
@@ -277,6 +287,11 @@ export function Dashboard() {
           <KPICard label="Uptime" value={formatUptime(status.uptime)} small />
           <KPICard label="Efficiency" value={status.acceptedShares > 0 ? `${((status.acceptedShares / (status.acceptedShares + status.rejectedShares)) * 100).toFixed(1)}%` : '—'} small />
         </div>
+      )}
+
+      {/* Hashrate Chart */}
+      {status.isRunning && hashrateHistory.length > 1 && (
+        <HashrateChart data={hashrateHistory} />
       )}
 
       {/* Reconnect countdown */}
@@ -588,5 +603,79 @@ Algorithm: ${coin.algorithm}`
         Copy Pool Config
       </button>
     </div>
+  )
+}
+
+function HashrateChart({ data }: { data: HashratePoint[] }) {
+  if (data.length < 2) return null
+  
+  const maxHashrate = Math.max(...data.map(d => d.hashrate))
+  const minHashrate = Math.min(...data.map(d => d.hashrate))
+  const range = maxHashrate - minHashrate || 1
+  
+  // SVG dimensions
+  const width = 100
+  const height = 40
+  const padding = 2
+  
+  // Generate path
+  const points = data.map((d, i) => {
+    const x = padding + (i / (data.length - 1)) * (width - 2 * padding)
+    const y = height - padding - ((d.hashrate - minHashrate) / range) * (height - 2 * padding)
+    return `${x},${y}`
+  })
+  
+  const pathD = `M ${points.join(' L ')}`
+  
+  // Time range
+  const startTime = new Date(data[0].timestamp)
+  const endTime = new Date(data[data.length - 1].timestamp)
+  const durationMins = Math.round((endTime.getTime() - startTime.getTime()) / 60000)
+  
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-surface-elevated p-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium text-[var(--text-secondary)]">Hashrate History</h3>
+        <span className="text-xs text-[var(--text-secondary)]">Last {durationMins} min</span>
+      </div>
+      
+      <div className="relative">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-20" preserveAspectRatio="none">
+          {/* Grid lines */}
+          <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="var(--border)" strokeWidth="0.5" strokeDasharray="2,2" />
+          
+          {/* Area fill */}
+          <path
+            d={`${pathD} L ${width - padding},${height - padding} L ${padding},${height - padding} Z`}
+            fill="url(#hashrate-gradient)"
+            opacity="0.3"
+          />
+          
+          {/* Line */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          
+          {/* Gradient definition */}
+          <defs>
+            <linearGradient id="hashrate-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22c55e" />
+              <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+        </svg>
+        
+        {/* Labels */}
+        <div className="flex justify-between text-xs text-[var(--text-secondary)] mt-1">
+          <span>{minHashrate.toFixed(0)} H/s</span>
+          <span>{maxHashrate.toFixed(0)} H/s</span>
+        </div>
+      </div>
+    </section>
   )
 }

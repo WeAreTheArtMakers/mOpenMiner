@@ -20,6 +20,11 @@ export interface MiningStatus {
   warning: string | null
 }
 
+export interface HashratePoint {
+  timestamp: number
+  hashrate: number
+}
+
 export interface CoinDefinition {
   id: string
   name: string
@@ -71,6 +76,7 @@ interface AppState {
   customBinaryPath: string | null
   crashRecovery: CrashRecoveryState | null
   currentPreset: PerformancePreset
+  hashrateHistory: HashratePoint[]
   
   // Actions
   setConsent: (consent: boolean) => void
@@ -93,6 +99,7 @@ interface AppState {
   refreshStatus: () => Promise<void>
   loadCoins: () => Promise<void>
   saveProfile: (profile: Omit<Profile, 'id'>) => Promise<void>
+  deleteProfile: (profileId: string) => Promise<void>
   loadProfiles: () => Promise<void>
   appendLog: (log: string) => void
   exportDiagnostics: (maskWallets: boolean) => Promise<string>
@@ -125,6 +132,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   customBinaryPath: null,
   crashRecovery: null,
   currentPreset: 'balanced',
+  hashrateHistory: [],
 
   setConsent: (consent) => {
     set({ hasConsent: consent })
@@ -213,7 +221,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       await invoke('stop_mining')
-      set({ status: defaultStatus })
+      set({ status: defaultStatus, hashrateHistory: [] })
     } catch (e) {
       console.error('Failed to stop mining:', e)
     }
@@ -226,6 +234,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         is_running: boolean
         coin: string | null
         pool: string | null
+        wallet: string | null
         worker: string | null
         hashrate: number
         avg_hashrate: number
@@ -235,6 +244,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         active_miner: string
         warning: string | null
         started_at: number
+        algorithm: string | null
       }>('get_status')
       
       // Map snake_case to camelCase
@@ -252,7 +262,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeMiner: raw.active_miner,
         warning: raw.warning,
       }
-      set({ status })
+      
+      // Update hashrate history (keep last 60 points = ~1 hour at 1 min intervals)
+      set((state) => {
+        const now = Date.now()
+        const newHistory = [...state.hashrateHistory]
+        
+        // Only add if mining and hashrate > 0
+        if (raw.is_running && raw.hashrate > 0) {
+          // Add new point if last point is > 30 seconds old
+          const lastPoint = newHistory[newHistory.length - 1]
+          if (!lastPoint || now - lastPoint.timestamp > 30000) {
+            newHistory.push({ timestamp: now, hashrate: raw.hashrate })
+          }
+          // Keep only last 120 points (1 hour at 30s intervals)
+          while (newHistory.length > 120) {
+            newHistory.shift()
+          }
+        }
+        
+        return { status, hashrateHistory: newHistory }
+      })
     } catch (e) {
       console.error('Failed to get status:', e)
     }
@@ -274,6 +304,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().loadProfiles()
     } catch (e) {
       console.error('Failed to save profile:', e)
+    }
+  },
+
+  deleteProfile: async (profileId) => {
+    try {
+      await invoke('delete_profile', { profileId })
+      await get().loadProfiles()
+    } catch (e) {
+      console.error('Failed to delete profile:', e)
     }
   },
 
