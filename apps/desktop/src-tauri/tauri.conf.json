@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "OpenMiner",
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "tauri": {
     "allowlist": {
@@ -37,7 +37,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "longDescription": "A transparent, open-source mining dashboard and manager for macOS",
+      "longDescription": "A transparent, open-source mining dashboard and manager for macOS. Mine XMR, VRSC, RTM and more with an easy-to-use interface.",
       "macOS": {
         "entitlements": null,
         "exceptionDomain": "",
@@ -45,6 +45,14 @@
         "minimumSystemVersion": "12.0",
         "providerShortName": null,
         "signingIdentity": null
+      },
+      "deb": {
+        "depends": []
+      },
+      "dmg": {
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 },
+        "windowSize": { "width": 660, "height": 400 }
       },
       "resources": [
         "../../../assets/coins/*"
