@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "id": "rtm",
+  "name": "Raptoreum",
+  "symbol": "RTM",
+  "algorithm": "ghostrider",
+  "recommended_miner": "xmrig",
+  "cpu_mineable": true,
+  "default_pools": [
+    {
+      "name": "Flockpool",
+      "stratum_url": "stratum+tcp://stratum.flockpool.com:4444",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Suprnova",
+      "stratum_url": "stratum+tcp://rtm.suprnova.cc:6273",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Mining Dutch",
+      "stratum_url": "stratum+tcp://rtm.mining-dutch.nl:9052",
+      "tls": false,
+      "region": "eu"
+    },
+    {
+      "name": "R-Pool",
+      "stratum_url": "stratum+tcp://r-pool.net:3008",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Vipor",
+      "stratum_url": "stratum+tcp://pool.vipor.net:5066",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://rtm.2miners.com:4444",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "Kryptex",
+      "stratum_url": "stratum+tcp://rtm.kryptex.network:7777",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "HeroMiners",
+      "stratum_url": "stratum+ssl://raptoreum.herominers.com:1196",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "MinerPool",
+      "stratum_url": "stratum+tcp://rtm.minerpool.org:6248",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "GhostRider algorithm - CPU optimized. Good for Apple Silicon.",
+  "trusted": true
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "zil",
+  "name": "Zilliqa",
+  "trusted": true,
+  "symbol": "ZIL",
+  "algorithm": "ethash",
+  "recommended_miner": "external-gpu",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "Ezil",
+      "stratum_url": "stratum+ssl://zil.ezil.me:15555",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "ShardPool",
+      "stratum_url": "stratum+ssl://zil.shardpool.io:7777",
+      "tls": true,
+      "region": "global"
+    },
+    {
+      "name": "2Miners",
+      "stratum_url": "stratum+ssl://zil.2miners.com:6666",
+      "tls": true,
+      "region": "global"
+    }
+  ],
+  "notes": "Zilliqa uses Ethash algorithm. GPU mining required. Dual-mining with ZIL+ETH possible on some pools."
+}

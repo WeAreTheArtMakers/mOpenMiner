@@ -1,0 +1,168 @@
+name: Release Builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macOS
+            artifact: dmg
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: Pi5
+            artifact: tar.gz
+          - os: ubuntu-latest
+            target: x86_64-pc-windows-gnu
+            platform: Windows
+            artifact: zip
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm@8
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      
+      - name: Install MinGW (Windows)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+      
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Build frontend
+        run: pnpm build
+      
+      - name: Build macOS app
+        if: matrix.platform == 'macOS'
+        run: pnpm tauri build
+      
+      - name: Build Pi5 binary
+        if: matrix.platform == 'Pi5'
+        run: |
+          cd apps/desktop/src-tauri
+          cargo build --release --target ${{ matrix.target }}
+          cd target/${{ matrix.target }}/release
+          tar -czf OpenMiner-Pi5-arm64.tar.gz openminedash
+      
+      - name: Build Windows binary
+        if: matrix.platform == 'Windows'
+        run: |
+          cd apps/desktop/src-tauri
+          cargo build --release --target ${{ matrix.target }}
+          cd target/${{ matrix.target }}/release
+          zip OpenMiner-Windows-x64.zip openminedash.exe
+      
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.tar.gz
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.zip
+          body: |
+            ## OpenMiner v${{ github.ref_name }} - Multi-Platform Release
+            
+            ### 📥 Downloads
+            
+            | Platform | File | Installation |
+            |----------|------|--------------|
+            | **macOS (Apple Silicon)** | `OpenMiner-*.dmg` | Open DMG, drag to Applications |
+            | **Raspberry Pi 5** | `OpenMiner-Pi5-arm64.tar.gz` | Extract and run (see below) |
+            | **Windows** | `OpenMiner-Windows-x64.zip` | Extract and run `.exe` |
+            
+            ### 🥧 Raspberry Pi 5 Installation
+            
+            ```bash
+            # Extract
+            tar -xzf OpenMiner-Pi5-arm64.tar.gz
+            
+            # Install dependencies
+            sudo apt-get update
+            sudo apt-get install -y libwebkit2gtk-4.0-37 libayatana-appindicator3-1
+            
+            # Run
+            chmod +x openminedash
+            ./openminedash
+            ```
+            
+            **System Requirements:**
+            - Raspberry Pi 5 (4GB or 8GB RAM)
+            - Raspberry Pi OS (64-bit) with desktop
+            - Active cooling recommended
+            
+            **Performance:**
+            - Monero (XMR): ~1-2 KH/s
+            - Power: ~15W (4x more efficient than desktop)
+            - Perfect for 24/7 mining
+            
+            📖 [Complete Pi5 Guide](https://github.com/WeAreTheArtMakers/mOpenMiner/blob/main/docs/RASPBERRY_PI5.md)
+            
+            ### 🪟 Windows Installation
+            
+            1. Extract `OpenMiner-Windows-x64.zip`
+            2. Run `openminedash.exe`
+            3. Allow through Windows Defender if prompted
+            4. Install [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) if needed
+            
+            📖 [Complete Windows Guide](https://github.com/WeAreTheArtMakers/mOpenMiner/blob/main/docs/WINDOWS.md)
+            
+            ### 🍎 macOS Installation
+            
+            1. Open the `.dmg` file
+            2. Drag OpenMiner to Applications folder
+            3. Launch from Applications
+            4. If blocked by Gatekeeper: System Settings → Privacy & Security → Allow Anyway
+            
+            ### 📚 Documentation
+            
+            - [Build Instructions](https://github.com/WeAreTheArtMakers/mOpenMiner/blob/main/BUILD_INSTRUCTIONS.md)
+            - [Cross-Platform Build Guide](https://github.com/WeAreTheArtMakers/mOpenMiner/blob/main/docs/CROSS_PLATFORM_BUILD.md)
+            - [Changelog](https://github.com/WeAreTheArtMakers/mOpenMiner/blob/main/CHANGELOG.md)
+            
+            ### ✨ What's New
+            
+            - ✅ **Multi-Platform Support**: macOS, Raspberry Pi 5, and Windows
+            - ✅ **Automated Builds**: CI/CD pipeline for all platforms
+            - ✅ **Comprehensive Documentation**: Platform-specific guides
+            - ✅ **Low-Power Mining**: Optimized for Raspberry Pi 5
+            
+            ### 🔒 Security
+            
+            - All binaries built via GitHub Actions
+            - Open-source and auditable
+            - No hidden mining or telemetry
+            - User consent required for all operations
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

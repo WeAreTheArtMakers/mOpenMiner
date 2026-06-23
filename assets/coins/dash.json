@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "dash",
+  "name": "Dash",
+  "trusted": true,
+  "symbol": "DASH",
+  "algorithm": "x11",
+  "recommended_miner": "custom",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://dash.f2pool.com:1318",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "ViaBTC",
+      "stratum_url": "stratum+tcp://dash.viabtc.com:3333",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Antpool",
+      "stratum_url": "stratum+tcp://stratum-na.antpool.com:9031",
+      "tls": true,
+      "region": "na"
+    }
+  ],
+  "notes": "Dash uses X11 algorithm. ASIC mining required."
+}

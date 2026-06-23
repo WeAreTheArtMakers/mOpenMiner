@@ -1,0 +1,23 @@
+{
+  "name": "openminedash",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @openminedash/desktop dev",
+    "build": "pnpm --filter @openminedash/desktop build",
+    "tauri": "pnpm --filter @openminedash/desktop tauri",
+    "tauri:dev": "pnpm --filter @openminedash/desktop tauri dev",
+    "tauri:build": "pnpm --filter @openminedash/desktop tauri build",
+    "lint": "pnpm --filter @openminedash/desktop lint",
+    "typecheck": "pnpm --filter @openminedash/desktop typecheck",
+    "test": "pnpm --filter @openminedash/desktop test"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

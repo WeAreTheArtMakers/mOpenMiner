@@ -1,0 +1,91 @@
+{
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "OpenMiner",
+    "version": "1.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "open": true
+      },
+      "notification": {
+        "all": true
+      },
+      "process": {
+        "exit": true
+      },
+      "path": {
+        "all": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "category": "Utility",
+      "copyright": "© 2026 WATAM (We Are The Art Makers)",
+      "identifier": "com.openminer.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "longDescription": "A transparent, open-source mining dashboard and manager for macOS. Mine XMR, VRSC, RTM and more with an easy-to-use interface.",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "minimumSystemVersion": "12.0",
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.0-37",
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "dmg": {
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 },
+        "windowSize": { "width": 660, "height": 400 }
+      },
+      "resources": [
+        "../../../assets/coins/*"
+      ],
+      "shortDescription": "Mining Dashboard & Manager",
+      "targets": "all"
+    },
+    "security": {
+      "csp": null
+    },
+    "systemTray": {
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 720,
+        "resizable": true,
+        "title": "OpenMiner",
+        "width": 1100,
+        "minWidth": 800,
+        "minHeight": 600,
+        "visible": true,
+        "decorations": true
+      }
+    ]
+  }
+}

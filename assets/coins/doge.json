@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "doge",
+  "name": "Dogecoin",
+  "trusted": true,
+  "symbol": "DOGE",
+  "algorithm": "scrypt",
+  "recommended_miner": "external-asic",
+  "cpu_mineable": false,
+  "default_pools": [
+    {
+      "name": "ViaBTC",
+      "stratum_url": "stratum+tcp://doge.viabtc.com:3333",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "F2Pool",
+      "stratum_url": "stratum+tcp://doge.f2pool.com:5588",
+      "tls": false,
+      "region": "global"
+    },
+    {
+      "name": "Prohashing",
+      "stratum_url": "stratum+tcp://prohashing.com:3333",
+      "tls": false,
+      "region": "global"
+    }
+  ],
+  "notes": "Dogecoin uses Scrypt algorithm (merged mining with LTC). ASIC hardware required for profitable mining."
+}

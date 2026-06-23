@@ -1,0 +1,25 @@
+[package]
+name = "openminedash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = [ "path-all", "shell-open", "notification-all", "process-exit", "system-tray"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+openminedash-core = { path = "../../../crates/core" }
+openminedash-miner-adapters = { path = "../../../crates/miner_adapters" }
+openminedash-pools = { path = "../../../crates/pools" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
